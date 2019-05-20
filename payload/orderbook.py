@@ -3,7 +3,7 @@
 import time
 import numpy as np
 
-# from payload.signal import Signal
+from payload.signal import Signal
 
 
 class Orderbook:
@@ -18,7 +18,7 @@ class Orderbook:
         """
         self.logger = logger
 
-        self.Signal = None  # Signal()
+        self.Signal = Signal()
 
         self._ask_book = list()
         self._bid_book = list()
@@ -46,7 +46,7 @@ class Orderbook:
 
         self._update_tob(run_step, spread_lag_size)
         self._update_lob(run_step, spread_lag_size)
-        # self._update_signal(run_step)
+        self._update_signal(run_step)
 
     def _update_signal(self, run_step: int) -> None:
         """
