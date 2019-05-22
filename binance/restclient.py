@@ -2,8 +2,10 @@
 # encoding: utf-8
 import ccxt
 import sys
+from time import time_ns
 
 from core.shared import Side, OType
+from core.core import rounded_to_precision
 from payload.orderbook import Orderbook
 
 class RestClient:
@@ -116,7 +118,8 @@ class RestClient:
             # print(type(e).__name__, e.args, str(e))
             self.logger.error('While fetching tickers next error occur: ', type(e).__name__, "!!!", e.args)
             self.logger.error("Exiting")
-            sys.exit()
+            self.balances.clear()
+            # sys.exit()
 
 
     # endregion
@@ -169,10 +172,39 @@ class RestClient:
 
     # region Ticker
 
+    def calc_tickers(self, tickers: list = None):
+        """
+        Check for tickers list or iterate throw all tickers to add spread, mid_price data.
+        Add data to self.all_tickers container
+        :param tickers: list of valid tickers
+        :return:
+        """
+        if tickers is not None:
+            m = tickers
+        else:
+            m = self.all_tickers.keys()
+        for s in m:
+            tob_ask = self.all_tickers[s]['ask']
+            tob_bid = self.all_tickers[s]['bid']
+            # Calculate some digits
+            mid_price = rounded_to_precision((tob_bid + tob_ask) / 2, 8)
+            spread = rounded_to_precision((tob_ask - tob_bid), 8)
+            spread_p = rounded_to_precision(100 * spread / mid_price, 4)
+            # Update all_tickers with new data
+            self.all_tickers[s]['mid_price'] = mid_price
+            self.all_tickers[s]['spread'] = spread
+            self.all_tickers[s]['spread_p'] = spread_p
+            self.all_tickers[s]['timestamp'] = time_ns()
+
+    def process_tickers(self, tickers: list = None):
+        self.get_all_tickers()
+        self.calc_tickers(tickers)
+
     def get_all_tickers(self):
         # Fetch exchanges tickers for all pairs
         try:
             response = self.exchange.fetch_bids_asks()
+            self.all_tickers.clear()
             self.all_tickers = response
         except Exception as e:
             self.logger.error("While fetching ohlcv next error occur: {}\n{}\n".format(type(e).__name__, e.args))
