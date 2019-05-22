@@ -9,6 +9,7 @@ from binance.restclient import RestClient
 from payload.trader import Trader
 from core.ui_curses import UI_curses, curses
 from core.influx import Influx
+from core.core import rounded_to_precision
 
 
 class Runner(object):
@@ -21,29 +22,22 @@ class Runner(object):
         Init counter and enable logging
         """
         self.logger = logger
-        self.now_time = int(time())
+        self.last_fetch_time = int(time())
         self.dry_run = kwargs['DRY_RUN']
         # Init screen with ui
         self.ui = UI_curses()
         self.ui.print_ui()
-        sleep(1)
         # Init database connection
         self.influx = Influx(kwargs['INFLUX_DATA'])
-
-        # Init screen api data containers
-        self.header_str = ""
-        self.statusbar_str = ""
-        self.index_data = [['NAME', 'PROVIDER', 'VOLUME24', 'VDISTR', 'TOB ASK', 'TOB BID', 'SLP ASK', 'SLP BID'],
-                           ['-', '-', 0, 0, 0, 0, 0, 0], ]
-        self.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'SCIPRICE', 'MIN%', 'CURRENT%', 'MAX%', 'INFO'],
-                          ['-', '-', 0, 0, 0, 0, 0, 0], ]
-        self.pctchange_data = [['NAME', 'PROVIDER', 'BALANCE', 'SCIPRICE', 'TOB ASK', 'TOB BID', 'SLP ASK', 'SLP BID'],
-                     ['-', '-', 0, 0, 0, 0, 0, 0], ]
-        self.portfolio = kwargs['PORTFOLIO']
-        self.portfolio_assets = [x for x in self.portfolio.keys()]
-        self.portfolio_sci_volume: float = 0
+        # Init index values
         self.scindex = kwargs['SCINDEX']
-        self.scindex_value = None
+        self.scindex_markets = None
+        self.scindex_tickers = None
+        # Init portfolio
+        self.portfolio = kwargs['PORTFOLIO']
+        self.portfolio_base_asset = kwargs['PORTFOLIO_BASE_ASSET']
+        self.portfolio_base_volume: float = 0
+        self.portfolio_assets = [x for x in self.portfolio.keys()]
 
         self.run_step = 0
         self.balances = []
@@ -55,7 +49,6 @@ class Runner(object):
                                     secret=kwargs['AUTH_DATA']['binance']['secret'],
                                     verbose=False,
                                     logger=logger)
-
         # TODO Add data provider list
         self.data_provider_list.append('binance')
         # self.data_provider_list.append(['binance', self.exchange1])
@@ -65,15 +58,20 @@ class Runner(object):
         # Get all tickers
         self.exchange1.get_all_tickers()
         # Sort only open markets
-        self.scindex_tickers = {x: y for x, y in self.exchange1.all_tickers.items() if x in
-                                self.scindex_markets and y['bidVolume'] > 0 and y['askVolume'] > 0}
-        for x, y in self.scindex_tickers.items(): y['timestamp'] = time_ns()
+        self.scindex_tickers = {x for x in self.scindex_markets if self.exchange1.all_tickers[x]['askVolume'] > 0 and
+                                self.exchange1.all_tickers[x]['askVolume'] > 0}
         # After filtering tickers, combine new index markets
         self.scindex_markets = [x for x in self.scindex_markets if x in
-                                self.scindex_tickers.keys()]
+                                self.scindex_tickers]
+        self.exchange1.calc_tickers(self.scindex_markets)
         # Get portfolio markets
+        # TODO Unify to use assets which dont have a USDT markets as other base asssets option
         self.portfolio_markets = [x for x, y in self.exchange1.markets.items() if (y['base'] in self.portfolio_assets
-                                                                                   and y['quote'] in self.portfolio_assets)]
+                                                                                   and y['quote'] ==
+                                                                                   self.portfolio_base_asset) or (y['quote'] in self.portfolio_assets
+                                                                                   and y['base'] ==
+                                                                                   self.portfolio_base_asset)]
+        self.exchange1.calc_tickers(self.portfolio_markets)
         # Quote collector container
         self.quote_collector = []
 
@@ -91,34 +89,17 @@ class Runner(object):
             # self.exchange1.order_history_to_pickle(self.cache_path)
 
     # region Index data
-    def _calculate_index(self):
-        overall_volume = 0
-        index_ask_price = 0
-        index_bid_price = 0
-        for s in self.scindex_markets:
-            overall_volume += self.exchange1.all_tickers[s]['baseVolume']
-        for s in self.scindex_markets:
-            index_ask_price += self.exchange1.all_tickers[s]['ask']*self.exchange1.all_tickers[s][
-                'baseVolume']/overall_volume
-            index_bid_price += self.exchange1.all_tickers[s]['bid']*self.exchange1.all_tickers[s][
-                'baseVolume']/overall_volume
-        self.scindex_value = {'volume24': overall_volume, 'ask': index_ask_price, 'bid': index_bid_price}
-        return overall_volume, index_ask_price, index_bid_price
-
     def _update_index_data(self):
-        self.index_data.clear()
-        self.index_data = [['NAME', 'PROVIDER', 'VOLUME24', 'VDISTR', 'TOB ASK', 'TOB BID', 'SLP ASK', 'SLP BID'],]
-        o, ia, ib = self._calculate_index()
-        self.index_data.append(['SCINDEX', 'binance', "{:.2f}".format(o), '-',
-                                "{:.2f}".format(ia), "{:.2f}".format(ib),
-                                "{:.2f}".format(ia), "{:.2f}".format(ib)])
+        self.ui.index_data.clear()
+        self.ui.index_data = [['NAME', 'PROVIDER', 'TOB ASK', 'TOB BID', 'MID', 'SPREAD', 'SPREAD%'], ]
         for s in self.scindex_markets:
-            volume24 = self.exchange1.all_tickers[s]['baseVolume']
-            tob_ask = self.exchange1.all_tickers[s]['ask']
-            tob_bid = self.exchange1.all_tickers[s]['bid']
-            self.index_data.append([s, 'binance', "{:.2f}".format(volume24), "{:.2f}".format(volume24/o),
-                                    "{:.2f}".format(tob_ask), "{:.2f}".format(tob_bid),
-                                    "{:.2f}".format(tob_ask), "{:.2f}".format(tob_bid)])
+            ticker = self.exchange1.all_tickers[s]
+            self.ui.index_data.append([s, 'binance',
+                                       "{:.2f}".format(ticker['ask']),
+                                       "{:.2f}".format(ticker['bid']),
+                                       "{:.2f}".format(ticker['mid_price']),
+                                       "{:.2f}".format(ticker['spread']),
+                                       "{:.4f}".format(ticker['spread_p'])])
     # endregion
 
     # region Portfolio data
@@ -133,43 +114,44 @@ class Runner(object):
                     else:
                         return amount*self.portfolio_ohlcv[m][-1][4]
 
-    def _count_sci_balance(self, asset):
-        if asset == 'BTC':
-            btc_balance = self.balances[asset]['all']
+    def _count_base_balance(self, asset):
+        if asset == self.portfolio_base_asset:
+            base_balance = self.balances[asset]['all']
+        elif asset == 'USDT':
+            base_balance = self.balances[asset]['all'] / self.portfolio_ohlcv[
+                "{}/{}".format(self.portfolio_base_asset, asset)][-1][4]
         else:
-            btc_balance = self._count_btc_balance(self.balances[asset]['all'], asset)
-
-        return btc_balance * (self.scindex_value['ask']+self.scindex_value['bid'])/2
+            base_balance = self.balances[asset]['all'] * self.portfolio_ohlcv[
+                "{}/{}".format(asset, self.portfolio_base_asset)][-1][4]
+        return base_balance
 
     def _update_portfolio_data(self):
-        self.portfolio_data.clear()
-        self.portfolio_sci_volume = 0
-        self.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'SCIPRICE', 'MIN%', 'CURRENT%', 'MAX%', 'INFO'],]
+        self.ui.portfolio_data.clear()
+        self.ui.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'MIN%', 'CURRENT%', 'MAX%'],]
+        pbv = 0
         for c in self.portfolio_assets:
-            self.portfolio_sci_volume += self._count_sci_balance(c)
-        sci_cum_balance = 0
+            pbv += self._count_base_balance(c)
         for c in self.portfolio_assets:
-            sci_balance = self._count_sci_balance(c)
-            sci_cum_balance += sci_balance
-            self.portfolio_data.append([c, 'binance', "{:.4f}".format(self.balances[c]['all']),
-                                        "{:.2f}".format(float(sci_balance)),
+            base_balance = float(self._count_base_balance(c))
+            self.ui.portfolio_data.append([c, 'binance', "{:.4f}".format(self.balances[c]['all']),
+                                        "{:.2f}".format(base_balance),
                                         "{:.2f}".format(self.portfolio[c]['min']),
-                                        "{:.2f}".format(100*float(sci_balance)/self.portfolio_sci_volume),
-                                        "{:.2f}".format(self.portfolio[c]['max']), "{:.2f}".format(0)])
-        self.portfolio_data.append(['ALL', 'binance', '-',
-                                    "{:.2f}".format(sci_cum_balance), '-', '-', '-', '-',])
+                                        "{:.2f}".format(100*base_balance/pbv),
+                                        "{:.2f}".format(self.portfolio[c]['max'])])
+        self.portfolio_base_volume = pbv
+        self.ui.portfolio_data.append(['ALL', 'binance', '-',
+                                    "{:.2f}".format(pbv), '-', '-', '-', ])
     # endregion
 
     # region Price change data
     def _update_pctchange_data(self) -> None:
-        self.pctchange_data.clear()
-        self.pctchange_data = [['NAME', 'PROVIDER', '1H%', '3H%', '6H%', '12H%', '24H%', '72H%']]
+        self.ui.pctchange_data.clear()
+        self.ui.pctchange_data = [['NAME', 'PROVIDER', '1H%', '3H%', '12H%', '24H%', '72H%']]
         for m in self.portfolio_markets:
             p = self.portfolio_ohlcv[m][-1][4]
-            self.pctchange_data.append([m, 'binance',
+            self.ui.pctchange_data.append([m, 'binance',
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-2][4])/p),
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-4][4])/p),
-                                        "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-7][4])/p),
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-13][4])/p),
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-25][4])/p),
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-73][4])/p)])
@@ -182,9 +164,9 @@ class Runner(object):
         pass
 
     def _wait_timeout(self):
-        now_time = int(time())
-        if (now_time - self.now_time > (30+randrange(10, 30))) or self.run_step == 0:
-            self.now_time = now_time
+        now_time = int(time()-1)
+        if (now_time - self.last_fetch_time > (randrange(40, 60))) or self.run_step == 0:
+            self.last_fetch_time = now_time
             return True
         else:
             return False
@@ -195,29 +177,26 @@ class Runner(object):
             sleep(1)
             for t in self.data_provider_list:
                 if t == 'binance' and self._wait_timeout():
-                    self.ui.push_data("Rebalancer",
-                                      "Last update: {}s | Status: Loading | ".format(int(self.now_time-time())),
-                                      self.index_data, self.portfolio_data, self.pctchange_data)
-                    self.ui.print_ui()
+                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Loading ohlcv | ".format(
+                            int(self.last_fetch_time - time())))
                     # self.exchange1.sanity_check() # Perform checking connections and previous lag
-                    # Clear tickers data
-                    self.exchange1.all_tickers = {}
-                    # Fill index data
-                    for symbol in self.scindex_markets:
-                        self.exchange1._fetch_ticker(symbol)
                     # Add index data to list
                     self._update_index_data()
                     # Fill ohlcv data
                     self.portfolio_ohlcv = {}
-                    for symbol in self.portfolio_markets:
-                        self.portfolio_ohlcv[symbol] = self.exchange1.get_ohlcv(symbol, timeframe='1h')
+                    for _ in self.portfolio_markets:
+                        self.portfolio_ohlcv[_] = self.exchange1.get_ohlcv(_, timeframe='1h')
+                    # Fill balances data
+                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Loading balances | ".format(
+                            int(self.last_fetch_time - time())))
+                    self.exchange1.fetch_balances()
+                    self.balances = {x: y for x, y in self.exchange1.balances.items() if x in self.portfolio_assets}
                     # Calculate portfolio recommendations
                     self._calculate_portfolio_recommendations()
                     # Add data to lists
                     self._update_pctchange_data()
                     # Fill portfolio data
-                    self.exchange1.fetch_balances()
-                    self.balances = {x: y for x, y in self.exchange1.balances.items() if x in self.portfolio_assets}
+
                     # Add data to lists
                     self._update_portfolio_data()
 
@@ -239,10 +218,11 @@ class Runner(object):
             # else:
             #     self.logger.error("While placing orders we catch an error:", exc_info=True)
             #     exit(56)
-            self.ui.push_data('Rebalancer',
-                              "Last update: {}s | Status: OK | ".format(int(self.now_time-time())),
-                              self.index_data, self.portfolio_data, self.pctchange_data)
-            self.ui.print_ui()
+            self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: OK | ".format(
+                    int(time() - self.last_fetch_time)))
+            # self.ui.push_data("Last update: {:>2}s | Status: OK | ".format(
+            #         int(time() - self.last_fetch_time)))
+            # self.ui.print_ui()
             self.run_step += 1
             # Wait for next input
             # self.ui.key_pressed = self.ui.stdscr.getch()
