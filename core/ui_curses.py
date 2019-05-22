@@ -12,12 +12,12 @@ class UI_curses:
         # Load ui_data
         self.header_str = 'Rebalancer'
         self.statusbar_str = " | Status: Loading | "
-        self.index_data = [['NAME', 'PROVIDER', 'VOLUME24', 'VDISTR', 'TOB ASK', 'TOB BID', 'SLP ASK', 'SLP BID'],
-                           ['-', '-', 0, 0, 0, 0, 0, 0], ]
-        self.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'SCIPRICE', 'MIN%', 'CURRENT%', 'MAX%', 'INFO'],
-                          ['-', '-', 0, 0, 0, 0, 0, 0], ]
-        self.pctchange_data = [['NAME', 'PROVIDER', 'BALANCE', 'SCIPRICE', 'TOB ASK', 'TOB BID', 'SLP ASK', 'SLP BID'],
-                     ['-', '-', 0, 0, 0, 0, 0, 0], ]
+        self.index_data = [['NAME', 'PROVIDER', 'TOB ASK', 'TOB BID', 'MID', 'SPREAD', 'SPREAD%'],
+                           ['-', '-', 0, 0, 0, 0, 0], ]
+        self.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'MIN%', 'CURRENT%', 'MAX%'],
+                           ['-', '-', 0, 0, 0, 0, 0], ]
+        self.pctchange_data = [['NAME', 'PROVIDER', '1H%', '3H%', '12H%', '24H%', '72H%'],
+                           ['-', '-', 0, 0, 0, 0, 0], ]
         # Init curses screen
         try:
             self.stdscr = curses.initscr()
@@ -33,14 +33,17 @@ class UI_curses:
         except:
             print('-=UI does not work=-')
 
+    def reload_ui(self, **kwargs):
+        self.push_data(**kwargs)
+        self.print_ui()
 
-
-    def push_data(self, header_str, statusbar_str, index_data, portfolio_data, pctchange):
-        self.header_str = header_str
-        self.statusbar_str = statusbar_str
-        self.index_data = index_data
-        self.portfolio_data = portfolio_data
-        self.pctchange_data = pctchange
+    def push_data(self, statusbar_str: str = None, header_str: str = None,
+                  index_data: list = None, portfolio_data: list = None, pctchange_data: list = None):
+        if header_str is not None: self.header_str = header_str
+        if statusbar_str is not None: self.statusbar_str = statusbar_str
+        if index_data is not None: self.index_data = index_data
+        if portfolio_data is not None: self.portfolio_data = portfolio_data
+        if pctchange_data is not None: self.pctchange_data = pctchange_data
 
     def print_table_header(self, data):
         for i in range(0, len(data[0])):
@@ -101,4 +104,4 @@ class UI_curses:
             self.stdscr.refresh()
 
         except:
-            print('')
+            pass
