@@ -21,7 +21,9 @@ class RestClient:
         self._api_key = api_key
         self.exchange = ccxt.binance({"apiKey": self._api_key,
                                       "secret": self._secret,
-                                      'verbose': verbose})  # type: ccxt.binance
+                                      'verbose': verbose,
+                                      'adjustForTimeDifference': True, # ←---- resolves the timestamp
+                                      'enableRateLimit': True})  # type: ccxt.binance
 
         # Initialize the Orderbook with a set of empty dicts and other defaults
         self.orderbook = Orderbook(window, logger)
