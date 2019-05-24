@@ -76,9 +76,11 @@ class UI_curses:
             self.stdscr.erase()
             height, width = self.stdscr.getmaxyx()
             dash = '─' * (width - 3) + '\n'
+            header_string = self.header_str[:width-1]
+            status_bar_string = self.statusbar_str[:width-1]
             # Header
             if width > len(self.header_str) + 1:
-                self.stdscr.addstr(0, int(width / 2 - 5), self.header_str)
+                self.stdscr.addstr(0, int(width / 2 - 5), header_string)
             # Portfolio data
             self.stdscr.addstr(1, 0, dash)
             self.print_table_header(self.index_data)
@@ -99,7 +101,7 @@ class UI_curses:
             self.print_table_body(self.pctchange_data)
             # Render status bar
             if width > len(self.statusbar_str) + 1:
-                self.stdscr.addstr(height - 1, 0, self.statusbar_str)
+                self.stdscr.addstr(height - 1, 0, status_bar_string)
             # Refresh the screen
             self.stdscr.refresh()
 
