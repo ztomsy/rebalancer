@@ -177,12 +177,18 @@ class Runner(object):
             sleep(1)
             for t in self.data_provider_list:
                 if t == 'binance' and self._wait_timeout():
-                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Loading ohlcv | ".format(
+                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Loading tickers | ".format(
                             int(self.last_fetch_time - time())))
                     # self.exchange1.sanity_check() # Perform checking connections and previous lag
+                    # Load last tickers prices
+                    self.exchange1.get_all_tickers()
+                    # And calculate some routines for tickers
+                    self.exchange1.calc_tickers(self.scindex_markets)
                     # Add index data to list
                     self._update_index_data()
                     # Fill ohlcv data
+                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Loading ohlcv | ".format(
+                            int(self.last_fetch_time - time())))
                     self.portfolio_ohlcv = {}
                     for _ in self.portfolio_markets:
                         self.portfolio_ohlcv[_] = self.exchange1.get_ohlcv(_, timeframe='1h')
