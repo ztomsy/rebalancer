@@ -1,16 +1,17 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-from time import sleep, time_ns, time
+from time import sleep, time_ns, time, ctime
 from sys import exit
 from random import randrange
+from datetime import datetime, timedelta
 
 from binance.restclient import RestClient
 from payload.trader import Trader
-from core.ui_curses import UI_curses, curses
-from core.influx import Influx
-from core.core import rounded_to_precision
-
+from yat.ui_curses import UI_curses, curses
+from yat.influx import Influx
+from yat.calcus import rounded_to_precision
+from payload.portfolio_opt import PortfolioOpt
 
 class Runner(object):
     """
@@ -27,6 +28,7 @@ class Runner(object):
         # Init screen with ui
         self.ui = UI_curses()
         self.ui.print_ui()
+        self.ui.header_str = "Portfolio ReBalancer build:{}".format(kwargs['VERSION'])
         # Init database connection
         self.influx = Influx(kwargs['INFLUX_DATA'])
         # Init index values
@@ -65,7 +67,6 @@ class Runner(object):
                                 self.scindex_tickers]
         self.exchange1.calc_tickers(self.scindex_markets)
         # Get portfolio markets
-        # TODO Unify to use assets which dont have a USDT markets as other base asssets option
         self.portfolio_markets = [x for x, y in self.exchange1.markets.items() if (y['base'] in self.portfolio_assets
                                                                                    and y['quote'] ==
                                                                                    self.portfolio_base_asset) or (y['quote'] in self.portfolio_assets
@@ -157,9 +158,6 @@ class Runner(object):
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-73][4])/p)])
     # endregion
 
-    def _calculate_portfolio_recommendations(self):
-        pass
-
     def _generate_quotes(self):
         pass
 
@@ -197,14 +195,25 @@ class Runner(object):
                             int(self.last_fetch_time - time())))
                     self.exchange1.fetch_balances()
                     self.balances = {x: y for x, y in self.exchange1.balances.items() if x in self.portfolio_assets}
-                    # Calculate portfolio recommendations
-                    self._calculate_portfolio_recommendations()
                     # Add data to lists
                     self._update_pctchange_data()
-                    # Fill portfolio data
-
-                    # Add data to lists
                     self._update_portfolio_data()
+                    # Calculate optimize portfolio
+                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Optimize portfolio | ".format(
+                            int(self.last_fetch_time - time())))
+                    weight_bounds = (0, 1)
+                    # Compile asset list for optimization
+                    oal = self.portfolio
+                    opt_assets_list = list(self.portfolio.keys())
+                    opt_assets_list.remove(self.portfolio_base_asset)
+                    # Get recommended weights from optimizer
+                    non_zero_weights, p_list = PortfolioOpt().generate_report(
+                            self.portfolio_ohlcv, weight_bounds, opt_assets_list)
+                    self.ui.reload_ui(screen_data=p_list)
+                    #print(p_list)
+                    # Calculate recommendations
+
+                    # Generate quotes
 
                 if t == 'kucoin':
                     pass
