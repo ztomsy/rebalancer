@@ -4,6 +4,7 @@ Ugly table-style interface
 
 import curses
 
+
 class UI_curses:
 
     def __init__(self):
@@ -18,6 +19,7 @@ class UI_curses:
                            ['-', '-', 0, 0, 0, 0, 0], ]
         self.pctchange_data = [['NAME', 'PROVIDER', '1H%', '3H%', '12H%', '24H%', '72H%'],
                            ['-', '-', 0, 0, 0, 0, 0], ]
+        self.screen_data = [' ', ]
         # Init curses screen
         try:
             self.stdscr = curses.initscr()
@@ -30,7 +32,9 @@ class UI_curses:
             curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
             curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
             curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
+            curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_WHITE)
         except:
+            # TODO Discover new exception behavior when terminal is unavialable
             print('-=UI does not work=-')
 
     def reload_ui(self, **kwargs):
@@ -38,12 +42,14 @@ class UI_curses:
         self.print_ui()
 
     def push_data(self, statusbar_str: str = None, header_str: str = None,
-                  index_data: list = None, portfolio_data: list = None, pctchange_data: list = None):
+                  index_data: list = None, portfolio_data: list = None,
+                  pctchange_data: list = None, screen_data: list = None):
         if header_str is not None: self.header_str = header_str
         if statusbar_str is not None: self.statusbar_str = statusbar_str
         if index_data is not None: self.index_data = index_data
         if portfolio_data is not None: self.portfolio_data = portfolio_data
         if pctchange_data is not None: self.pctchange_data = pctchange_data
+        if screen_data is not None: self.screen_data = screen_data
 
     def print_table_header(self, data):
         for i in range(0, len(data[0])):
@@ -71,16 +77,33 @@ class UI_curses:
                     self.stdscr.addstr("{:^10s}".format(str(data[i][j])), curses.color_pair(3))
             self.stdscr.addstr("\n")
 
+    def print_screen(self, data: list):
+        for s in data:
+            self.stdscr.addstr(str(s))
+            self.stdscr.addstr("\n")
+
     def print_ui(self):
         try:
             self.stdscr.erase()
             height, width = self.stdscr.getmaxyx()
-            dash = '─' * (width - 3) + '\n'
+            dash = '─' * (width - 1) + '\n'
+            # Perform safe crop to avoid drawing problem
             header_string = self.header_str[:width-1]
             status_bar_string = self.statusbar_str[:width-1]
-            # Header
+            # region Header
+            # Turning on attributes for Header
+            self.stdscr.attron(curses.color_pair(4))
+            self.stdscr.attron(curses.A_BOLD)
+            # Draw Header
             if width > len(self.header_str) + 1:
-                self.stdscr.addstr(0, int(width / 2 - 5), header_string)
+                self.stdscr.addstr(0, 0, " " * (width - 1))
+                self.stdscr.addstr(0, int((width / 2) - (len(header_string) / 2)), header_string)
+            # Turning off attributes for Header
+            self.stdscr.attroff(curses.color_pair(4))
+            self.stdscr.attroff(curses.A_BOLD)
+            # endregion
+
+            #region Body
             # Portfolio data
             self.stdscr.addstr(1, 0, dash)
             self.print_table_header(self.index_data)
@@ -99,9 +122,23 @@ class UI_curses:
             # Pctchange body
             self.stdscr.addstr(dash)
             self.print_table_body(self.pctchange_data)
+            # Screen body
+            self.stdscr.addstr(dash)
+            self.print_screen(self.screen_data)
+            #endregion
+
+            # region Status bar
+            # Turning on attributes for status bar
+            self.stdscr.attron(curses.color_pair(4))
+            self.stdscr.attron(curses.A_BOLD)
             # Render status bar
             if width > len(self.statusbar_str) + 1:
                 self.stdscr.addstr(height - 1, 0, status_bar_string)
+                self.stdscr.addstr(height - 1, len(status_bar_string), " " * (width - len(status_bar_string) - 1))
+            # Turning off attributes for Header
+            self.stdscr.attroff(curses.color_pair(4))
+            self.stdscr.attroff(curses.A_BOLD)
+            # endregion
             # Refresh the screen
             self.stdscr.refresh()
 

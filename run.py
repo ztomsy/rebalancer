@@ -5,7 +5,7 @@ import sys
 
 import _settings
 from payload.runner import Runner
-from core import logger
+from yat import logger
 
 
 # Parse settings file for

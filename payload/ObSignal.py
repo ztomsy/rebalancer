@@ -3,7 +3,7 @@ from statistics import pstdev
 import numpy as np
 from numpy import mean
 
-class Signal:
+class ObSignal:
     '''
     Class to store, update and manipulate the signal
     '''
@@ -42,8 +42,7 @@ class Signal:
         self.askmacds = [0] * 2
         self.bidmacds = [0] * 2
 
-
-    def make_mid_signal(self, step, bid, ask):
+    def make_mid_signal(self, step: int, bid: float, ask: float):
         self.mid = (ask + bid) / 2
         if self.midl1 == 0:
             self.midl1 = self.mid

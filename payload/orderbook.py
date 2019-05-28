@@ -3,7 +3,7 @@
 import time
 import numpy as np
 
-from payload.signal import Signal
+from payload.ObSignal import ObSignal
 
 
 class Orderbook:
@@ -11,14 +11,14 @@ class Orderbook:
     def __init__(self, window: int = 100, logger: object = None):
         """
         Initialize the Orderbook with a set of empty dicts and other defaults
-        Create local instance of Signal class to track orderbooks states
+        Create local instance of ObSignal class to track orderbooks states
         _bid_book and _ask_book: sorted list of presented order book state
         _tob are list of dicts with tob data indexed by add order
         _lob are list of order book tuples (run_step, ask_book, bid_book) indexed by add order
         """
         self.logger = logger
 
-        self.Signal = Signal()
+        self.Signal = ObSignal()
 
         self._ask_book = list()
         self._bid_book = list()

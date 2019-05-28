@@ -4,9 +4,11 @@ import ccxt
 import sys
 from time import time_ns
 
-from core.shared import Side, OType
-from core.core import rounded_to_precision
+from yat.shared import Side, OType
+from yat.calcus import rounded_to_precision
 from payload.orderbook import Orderbook
+
+
 
 class RestClient:
 
@@ -22,7 +24,7 @@ class RestClient:
         self.exchange = ccxt.binance({"apiKey": self._api_key,
                                       "secret": self._secret,
                                       'verbose': verbose,
-                                      'adjustForTimeDifference': True, # ←---- resolves the timestamp
+                                      'options': {'adjustForTimeDifference': True}, # ←---- resolves the timestamp
                                       'enableRateLimit': True})  # type: ccxt.binance
 
         # Initialize the Orderbook with a set of empty dicts and other defaults
@@ -57,6 +59,7 @@ class RestClient:
         :param quantity: the amount to buy/sell
         :param price: the price to buy/sell at, used in LIMIT order type
         :param new_client_order_id: A unique id for the order. Automatically generated if not sent (optional)
+
         :param stop_price: Used with stop orders (optional)
         :param iceberg_qty: Used with iceberg orders (optional)
         :return: response from an exchange with order data(orderID, etc.)
@@ -153,7 +156,7 @@ class RestClient:
 
     # region OHLCV Candles
 
-    def get_ohlcv(self, symbol, timeframe='1m', limit=100):
+    def get_ohlcv(self, symbol, timeframe='1m', limit=200):
         '''
         Fetch exchanges ticker for necessary pair
         :param symbol: Symbol (i.e. BNB/BTC)
