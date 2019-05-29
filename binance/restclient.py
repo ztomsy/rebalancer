@@ -32,6 +32,8 @@ class RestClient:
 
         # Load markets on initialization
         self.markets = self.exchange.load_markets()
+        # Sort only active markets
+        self.markets = {x: y for x, y in self.markets.items() if y['active']}
 
         self.all_tickers = {}
 
@@ -194,7 +196,11 @@ class RestClient:
             # Calculate some digits
             mid_price = rounded_to_precision((tob_bid + tob_ask) / 2, 8)
             spread = rounded_to_precision((tob_ask - tob_bid), 8)
-            spread_p = rounded_to_precision(100 * spread / mid_price, 4)
+            # FIXME Dont calc empty tickers
+            if mid_price > 0:
+                spread_p = rounded_to_precision(100 * spread / mid_price, 4)
+            else:
+                spread_p = 0
             # Update all_tickers with new data
             self.all_tickers[s]['mid_price'] = mid_price
             self.all_tickers[s]['spread'] = spread
