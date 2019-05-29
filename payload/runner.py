@@ -11,7 +11,7 @@ from payload.trader import Trader
 from yat.ui_curses import UI_curses, curses
 from yat.influx import Influx
 from yat.calcus import rounded_to_precision
-from payload.portfolio_opt import PortfolioOpt
+from payload.portfolioOpt import PortfolioOpt
 
 class Runner(object):
     """
@@ -28,7 +28,7 @@ class Runner(object):
         # Init screen with ui
         self.ui = UI_curses()
         self.ui.print_ui()
-        self.ui.header_str = "Portfolio ReBalancer build:{}".format(kwargs['VERSION'])
+        self.ui.header_str = "Portfolio ReBalancer build:{}".format(kwargs['BUILD_DATE'])
         # Init database connection
         self.influx = Influx(kwargs['INFLUX_DATA'])
         # Init index values
@@ -116,15 +116,18 @@ class Runner(object):
                         return amount*self.portfolio_ohlcv[m][-1][4]
 
     def _count_base_balance(self, asset):
-        if asset == self.portfolio_base_asset:
-            base_balance = self.balances[asset]['all']
-        elif asset == 'USDT':
-            base_balance = self.balances[asset]['all'] / self.portfolio_ohlcv[
-                "{}/{}".format(self.portfolio_base_asset, asset)][-1][4]
-        else:
-            base_balance = self.balances[asset]['all'] * self.portfolio_ohlcv[
-                "{}/{}".format(asset, self.portfolio_base_asset)][-1][4]
-        return base_balance
+        try:
+            if asset == self.portfolio_base_asset:
+                base_balance = self.balances[asset]['all']
+            elif asset == 'USDT':
+                base_balance = self.balances[asset]['all'] / self.portfolio_ohlcv[
+                    "{}/{}".format(self.portfolio_base_asset, asset)][-1][4]
+            else:
+                base_balance = self.balances[asset]['all'] * self.portfolio_ohlcv[
+                    "{}/{}".format(asset, self.portfolio_base_asset)][-1][4]
+            return base_balance
+        except KeyError:
+            return 0
 
     def _update_portfolio_data(self):
         self.ui.portfolio_data.clear()
@@ -133,12 +136,16 @@ class Runner(object):
         for c in self.portfolio_assets:
             pbv += self._count_base_balance(c)
         for c in self.portfolio_assets:
+            try:
+                balance_all = self.balances[c]['all']
+            except KeyError:
+                balance_all = 0
             base_balance = float(self._count_base_balance(c))
-            self.ui.portfolio_data.append([c, 'binance', "{:.4f}".format(self.balances[c]['all']),
+            self.ui.portfolio_data.append([c, 'binance', "{:.4f}".format(balance_all),
                                         "{:.2f}".format(base_balance),
-                                        "{:.2f}".format(self.portfolio[c]['min']),
-                                        "{:.2f}".format(100*base_balance/pbv),
-                                        "{:.2f}".format(self.portfolio[c]['max'])])
+                                        "{:.2f}".format(100 * self.portfolio[c][0]),
+                                        "{:.2f}".format(100 * base_balance/pbv),
+                                        "{:.2f}".format(100 * self.portfolio[c][1])])
         self.portfolio_base_volume = pbv
         self.ui.portfolio_data.append(['ALL', 'binance', '-',
                                     "{:.2f}".format(pbv), '-', '-', '-', ])
@@ -201,16 +208,18 @@ class Runner(object):
                     # Calculate optimize portfolio
                     self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Optimize portfolio | ".format(
                             int(self.last_fetch_time - time())))
-                    weight_bounds = (0, 1)
+                    weight_bounds = (0.001, 0.8)
+                    # weight_bounds = tuple(self.portfolio[self.portfolio_base_asset])
+                    # Period data frequency, may be equal to fetch ohlcv window size
+                    d_frequency = 100
                     # Compile asset list for optimization
                     oal = self.portfolio
                     opt_assets_list = list(self.portfolio.keys())
                     opt_assets_list.remove(self.portfolio_base_asset)
                     # Get recommended weights from optimizer
                     non_zero_weights, p_list = PortfolioOpt().generate_report(
-                            self.portfolio_ohlcv, weight_bounds, opt_assets_list)
+                            self.portfolio_ohlcv, weight_bounds, opt_assets_list, frequency=d_frequency)
                     self.ui.reload_ui(screen_data=p_list)
-                    #print(p_list)
                     # Calculate recommendations
 
                     # Generate quotes
