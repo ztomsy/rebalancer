@@ -34,7 +34,7 @@ class UI_curses:
             curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
             curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_WHITE)
         except:
-            # TODO Discover new exception behavior when terminal is unavialable
+            # TODO Discover new exception behavior if STDOUT is not a TTY.
             print('-=UI does not work=-')
 
     def reload_ui(self, **kwargs):

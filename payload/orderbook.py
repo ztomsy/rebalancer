@@ -3,7 +3,7 @@
 import time
 import numpy as np
 
-from payload.ObSignal import ObSignal
+from payload.obSignal import ObSignal
 
 
 class Orderbook:
