@@ -11,7 +11,6 @@ from pypfopt import expected_returns
 from timeit import default_timer as timer
 
 
-
 class PortfolioOpt:
 
     def __init__(self):
@@ -66,16 +65,12 @@ class PortfolioOpt:
     # endregion
 
     # region Optimizer
-    def generate_analysis_model(self, pricing_data, weight_bounds):
-        self.progress('Processing Pricing')
-        # TODO Now only works with 1h data
-        mu = expected_returns.mean_historical_return(pricing_data, 7*24)
-        s = risk_models.sample_cov(pricing_data, 7*24)
-
+    def generate_analysis_model(self, pricing_data, weight_bounds, frequency):
+        mu = expected_returns.mean_historical_return(pricing_data, frequency=frequency)
+        s = risk_models.sample_cov(pricing_data, frequency=frequency)
         range_begin = pricing_data.index[0]
         range_end = pricing_data.index[-1]
-
-        return range_begin, range_end, EfficientFrontier(mu, s, weight_bounds=weight_bounds, gamma=0)
+        return range_begin, range_end, EfficientFrontier(mu, s, weight_bounds=weight_bounds, gamma=1)
 
     def forward_looking_return(self, pricing_data, start_date, end_date, weights):
         df_pricing = pricing_data \
@@ -121,38 +116,41 @@ class PortfolioOpt:
             data = data.set_index("date")
             data_c[i] = data['c']
         # FIXME Check for assets_list and markets proper name
+
         data_c.columns = [assets_list]
         return data_c
 
-    def generate_report(self, pricing_data, weight_bounds, assets_list):
+    def generate_report(self, pricing_data, weight_bounds, assets_list, frequency: int):
         p_d = deepcopy(self.build_pricing_data_from_ohlcv(pricing_data, assets_list))
         # TODO Add separate bounds for each asset <class 'tuple'>: ((0, 0.6), (0.2, 1), (0, 0.1))
-        analysis_range_begin, analysis_range_end, ef = self.generate_analysis_model(p_d, weight_bounds)
+        # print(self.progress('Processing Pricing'))
+        analysis_range_begin, analysis_range_end, ef = self.generate_analysis_model(
+                p_d, weight_bounds, frequency=frequency)
         # Optimise for maximal Sharpe ratio
-        # print(self.progress('Choosing securities'))
-        # _omw = ef.efficient_risk(target_risk=0.1)
-        _raw_weights = ef.min_volatility()
+        # Choosing assets
+        _omw = ef.efficient_risk(target_risk=0.01)
+        # _raw_weights = ef.min_volatility()
         cleaned_weights = ef.clean_weights()
         non_zero_weights = dict(filter(lambda w: w[1] > 0.0, cleaned_weights.items()))
-        # print(self.progress('Calculating sharpe ratios'))
+        # Calculating sharpe ratios
         mu, sigma, sharpe = ef.portfolio_performance()
         # _mu, sigma, sharpe = ef.portfolio_performance(verbose=True)
-        # print(self.progress('Calculating Returns'))
+        # Calculating Returns
         range_begin, range_end, wavg_return = self.forward_looking_return(
             p_d,
             analysis_range_begin,
             analysis_range_end,
             non_zero_weights)
-
-        p_list = [str("Expected return for period: {:.2f}%".format(100 * mu)), ]
-        p_list.append("Portfolio Return ({}...{}): {:.2f}%".format(str(range_begin), str(range_end), 100 * wavg_return))
+        # Prepare list to pass to ui api
+        p_list = []
+        p_list.append("Period: {} - {}".format(str(range_begin), str(range_end)))
+        p_list.append("Expected return: {:.2f}%".format(100 * mu))
+        p_list.append("Portfolio return: {:.2f}%".format(100 * wavg_return))
         p_list.append("Volatility: {:.2f}%".format(100 * sigma))
         p_list.append("Sharpe Ratio: {:.2f}".format(sharpe))
         for key, value in sorted(non_zero_weights.items(), key=lambda kv: -kv[1]):
             p_list.append("{}: {:.2f}%".format(str(key[0]), 100 * value))
-        #
-        # print('(done in {:.3f} seconds)'.format(datetime.timedelta(seconds=self.elapsed_time()).total_seconds()))
-        #
+
         return non_zero_weights, p_list
 
     # endregion
