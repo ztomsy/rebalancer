@@ -1,8 +1,12 @@
 """
-Ugly table-style interface
+Ugly curses interface, support header, statusbar and
+simple table drawing with colouring and table header.
+
+Check print_ui for current ui implementation
 """
 
 import curses
+from time import strftime, localtime
 
 
 class UI_curses:
@@ -12,7 +16,7 @@ class UI_curses:
         self.key_pressed = 0
         # Load ui_data
         self.header_str = 'Rebalancer'
-        self.statusbar_str = " | Status: Loading | "
+        self.statusbar_str = 'Loading'
         self.index_data = [['NAME', 'PROVIDER', 'TOB ASK', 'TOB BID', 'MID', 'SPREAD', 'SPREAD%'],
                            ['-', '-', 0, 0, 0, 0, 0], ]
         self.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'MIN%', 'CURRENT%', 'MAX%'],
@@ -33,9 +37,10 @@ class UI_curses:
             curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
             curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
             curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_WHITE)
-        except:
+        except Exception as e:
             # TODO Discover new exception behavior if STDOUT is not a TTY.
-            print('-=UI does not work=-')
+            # print(type(e).__name__, e.args, str(e))
+            pass
 
     def reload_ui(self, **kwargs):
         self.push_data(**kwargs)
@@ -84,12 +89,15 @@ class UI_curses:
 
     def print_ui(self):
         try:
+            # region Preparing
             self.stdscr.erase()
             height, width = self.stdscr.getmaxyx()
             dash = '─' * (width - 1) + '\n'
             # Perform safe crop to avoid drawing problem
             header_string = self.header_str[:width-1]
             status_bar_string = self.statusbar_str[:width-1]
+            # endregion
+
             # region Header
             # Turning on attributes for Header
             self.stdscr.attron(curses.color_pair(4))
@@ -128,13 +136,16 @@ class UI_curses:
             #endregion
 
             # region Status bar
+            # Prepare statusbar from provided message and other attributes
+            statusbar_time_str = strftime("%H:%M:%S", localtime())
+            statusbar_p_string = "Server time: {} | Status: {} | ".format(statusbar_time_str, self.statusbar_str)
             # Turning on attributes for status bar
             self.stdscr.attron(curses.color_pair(4))
             self.stdscr.attron(curses.A_BOLD)
             # Render status bar
-            if width > len(self.statusbar_str) + 1:
-                self.stdscr.addstr(height - 1, 0, status_bar_string)
-                self.stdscr.addstr(height - 1, len(status_bar_string), " " * (width - len(status_bar_string) - 1))
+            if width > len(statusbar_p_string) + 1:
+                self.stdscr.addstr(height - 1, 0, statusbar_p_string)
+                self.stdscr.addstr(height - 1, len(statusbar_p_string), " " * (width - len(statusbar_p_string) - 1))
             # Turning off attributes for Header
             self.stdscr.attroff(curses.color_pair(4))
             self.stdscr.attroff(curses.A_BOLD)
@@ -142,5 +153,5 @@ class UI_curses:
             # Refresh the screen
             self.stdscr.refresh()
 
-        except:
+        except Exception as e:
             pass
