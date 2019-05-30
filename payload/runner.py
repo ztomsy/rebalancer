@@ -18,11 +18,13 @@ class Runner(object):
     Init and run main loop
     """
 
-    def __init__(self, logger: object = None,  **kwargs):
+    def __init__(self, logger: object = None, watcher: object = None, **kwargs):
         """
         Init counter and enable logging
         """
         self.logger = logger
+        self.file_watcher = watcher
+        self.file_watcher.look()
         self.last_fetch_time = int(time())
         self.dry_run = kwargs['DRY_RUN']
         # Init screen with ui
@@ -182,8 +184,7 @@ class Runner(object):
             sleep(1)
             for t in self.data_provider_list:
                 if t == 'binance' and self._wait_timeout():
-                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Loading tickers | ".format(
-                            int(self.last_fetch_time - time())))
+                    self.ui.reload_ui(statusbar_str="Loading tickers")
                     # self.exchange1.sanity_check() # Perform checking connections and previous lag
                     # Load last tickers prices
                     self.exchange1.get_all_tickers()
@@ -192,33 +193,26 @@ class Runner(object):
                     # Add index data to list
                     self._update_index_data()
                     # Fill ohlcv data
-                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Loading ohlcv | ".format(
-                            int(self.last_fetch_time - time())))
+                    self.ui.reload_ui(statusbar_str="Loading ohlcv")
                     self.portfolio_ohlcv = {}
                     for _ in self.portfolio_markets:
                         self.portfolio_ohlcv[_] = self.exchange1.get_ohlcv(_, timeframe='1h')
                     # Fill balances data
-                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Loading balances | ".format(
-                            int(self.last_fetch_time - time())))
+                    self.ui.reload_ui(statusbar_str="Loading balances")
                     self.exchange1.fetch_balances()
                     self.balances = {x: y for x, y in self.exchange1.balances.items() if x in self.portfolio_assets}
                     # Add data to lists
                     self._update_pctchange_data()
                     self._update_portfolio_data()
                     # Calculate optimize portfolio
-                    self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: Optimize portfolio | ".format(
-                            int(self.last_fetch_time - time())))
-                    weight_bounds = (0.001, 0.8)
+                    self.ui.reload_ui(statusbar_str="Optimize portfolio")
+                    weight_bounds = (0.01, 0.8)
                     # weight_bounds = tuple(self.portfolio[self.portfolio_base_asset])
                     # Period data frequency, may be equal to fetch ohlcv window size
                     d_frequency = 100
-                    # Compile asset list for optimization
-                    oal = self.portfolio
-                    opt_assets_list = list(self.portfolio.keys())
-                    opt_assets_list.remove(self.portfolio_base_asset)
                     # Get recommended weights from optimizer
                     non_zero_weights, p_list = PortfolioOpt().generate_report(
-                            self.portfolio_ohlcv, weight_bounds, opt_assets_list, frequency=d_frequency)
+                            self.portfolio_ohlcv, weight_bounds, self.portfolio_base_asset, d_frequency)
                     self.ui.reload_ui(screen_data=p_list)
                     # Calculate recommendations
 
@@ -242,15 +236,17 @@ class Runner(object):
             # else:
             #     self.logger.error("While placing orders we catch an error:", exc_info=True)
             #     exit(56)
-            self.ui.reload_ui(statusbar_str="Last update: {:>2}s | Status: OK | ".format(
-                    int(time() - self.last_fetch_time)))
-            # self.ui.push_data("Last update: {:>2}s | Status: OK | ".format(
-            #         int(time() - self.last_fetch_time)))
-            # self.ui.print_ui()
+            self.ui.reload_ui(statusbar_str="OK")
             self.run_step += 1
-            # Wait for next input
-            # self.ui.key_pressed = self.ui.stdscr.getch()
-
+            self.ui.reload_ui(statusbar_str="Checking settings file")
+            if self.file_watcher.look():
+                # Re init Runner with new settings
+                self.__init__(logger=self.logger,
+                              watcher=self.file_watcher,
+                              **self.file_watcher.settings)
+            self.ui.reload_ui(statusbar_str="OK")
+            # Wait for sleep timeout
+            # sleep(1)
             # if (self.run_step % write_interval == 0) and (self.run_step != 0):
             #     self.exchange1.tob_to_pickle(self.cache_path)
 
