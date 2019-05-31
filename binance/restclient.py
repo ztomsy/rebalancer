@@ -29,14 +29,11 @@ class RestClient:
 
         # Initialize the Orderbook with a set of empty dicts and other defaults
         self.orderbook = Orderbook(window, logger)
-
         # Load markets on initialization
         self.markets = self.exchange.load_markets()
         # Sort only active markets
         self.markets = {x: y for x, y in self.markets.items() if y['active']}
-
-        self.all_tickers = {}
-
+        self.all_tickers: dict = None
         # Order and trade sets
         self.confirm_trade_collector = []
         self._order_index = 0
@@ -81,6 +78,10 @@ class RestClient:
             print('While creating order next error occur: ', type(e).__name__, "!!!", e.args)
             print("Exiting")
             sys.exit()
+
+    def place_multiple_orders(self, quotes: list):
+
+        pass
 
     def add_order_to_history(self, order):
         '''Add an order (dict) to order_history'''
@@ -158,7 +159,7 @@ class RestClient:
 
     # region OHLCV Candles
 
-    def get_ohlcv(self, symbol, timeframe='1m', limit=200):
+    def get_ohlcv(self, symbol, timeframe='1m', limit=500):
         '''
         Fetch exchanges ticker for necessary pair
         :param symbol: Symbol (i.e. BNB/BTC)
@@ -196,7 +197,6 @@ class RestClient:
             # Calculate some digits
             mid_price = rounded_to_precision((tob_bid + tob_ask) / 2, 8)
             spread = rounded_to_precision((tob_ask - tob_bid), 8)
-            # FIXME Dont calc empty tickers
             if mid_price > 0:
                 spread_p = rounded_to_precision(100 * spread / mid_price, 4)
             else:
@@ -207,20 +207,42 @@ class RestClient:
             self.all_tickers[s]['spread_p'] = spread_p
             self.all_tickers[s]['timestamp'] = time_ns()
 
+    def clear_empty_tickers(self):
+        """
+        Check for non empty tickers and clear tickers without any quotes
+        Building new dict with non zero quote prices
+        """
+        if self.all_tickers is not None:
+            self.all_tickers = {x: y for x, y in self.all_tickers.items() if y['bid'] > 0 and y['ask'] > 0}
+
     def process_tickers(self, tickers: list = None):
+        """
+        Call http api for all tickers data.
+        Delete empty responses from all_tickers dict.
+        Calculate inplace data for tickers and add timestamp of calculation.
+        :param tickers:
+        """
         self.get_all_tickers()
+        self.clear_empty_tickers()
         self.calc_tickers(tickers)
 
     def get_all_tickers(self):
-        # Fetch exchanges tickers for all pairs
+        """
+        Blocking method!
+        Fetch exchanges tickers for all pairs
+        Save response to all_tickers, clear previous state
+        """
         try:
             response = self.exchange.fetch_bids_asks()
-            self.all_tickers.clear()
+            if self.all_tickers is not None:
+                self.all_tickers.clear()
             self.all_tickers = response
         except Exception as e:
             self.logger.error("While fetching ohlcv next error occur: {}\n{}\n".format(type(e).__name__, e.args))
-            self.logger.error("Exiting")
-            sys.exit()
+            self.all_tickers = None
+            # self.logger.error("Exiting")
+            # sys.exit()
+
 
     def _fetch_ticker(self, symbol):
         """
