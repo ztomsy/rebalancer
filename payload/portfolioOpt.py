@@ -56,12 +56,12 @@ class PortfolioOpt:
     # endregion
 
     # region Optimizer
-    def generate_analysis_model(self, pricing_data, weight_bounds, frequency, gamma):
+    def generate_analysis_model(self, pricing_data, weight_bounds, frequency):
         mu = expected_returns.mean_historical_return(pricing_data, frequency=frequency)
         s = risk_models.sample_cov(pricing_data, frequency=frequency)
         range_begin = pricing_data.index[0]
         range_end = pricing_data.index[-1]
-        return range_begin, range_end, EfficientFrontier(mu, s, weight_bounds=weight_bounds, gamma=gamma)
+        return range_begin, range_end, EfficientFrontier(mu, s, weight_bounds=weight_bounds, gamma=0)
 
     def forward_looking_return(self, pricing_data, start_date, end_date, weights):
         df_pricing = pricing_data \
@@ -120,22 +120,27 @@ class PortfolioOpt:
         data_c[base_asset] = 1
         return data_c
 
-    def generate_report(self, pricing_data, weight_bounds, base_asset, frequency: int):
+    def generate_report(self, pricing_data: dict = None,
+                        weight_bounds: tuple = None,
+                        base_asset: str = None,
+                        frequency: int = None,
+                        target_return: float = None,
+                        target_risk: float = None):
         # print(self.progress('Processing Pricing'))
         # Transform prices ohlcv data and add 1 price base asset column
         p_d = deepcopy(self.build_pricing_data_from_ohlcv(pricing_data, base_asset))
-        # L2 regularisation parameter, defaults to 0. Increase if you want more non-negligible weights
-        gamma = 0
-        analysis_range_begin, analysis_range_end, ef = self.generate_analysis_model(
-                p_d, weight_bounds, frequency, gamma)
 
+        analysis_range_begin, analysis_range_end, ef = self.generate_analysis_model(
+                p_d, weight_bounds, frequency)
         # Calculate the 'Markowitz portfolio', minimising volatility for a given target_return.
         # target_return: the desired return of the resulting portfolio
-        _oer = ef.efficient_return(target_return=0.5)
+        if target_return is not None:
+            _oer = ef.efficient_return(target_return=target_return)
 
         # Calculate the Sharpe-maximising portfolio for a given volatility(max return for a target_risk).
         # target_risk: the desired volatility of the resulting portfolio
-        # _omw = ef.efficient_risk(target_risk=0.07)
+        if target_risk is not None:
+            _omw = ef.efficient_risk(target_risk=target_risk)
 
         # Minimise volatility
         # _raw_weights = ef.min_volatility()
@@ -143,7 +148,7 @@ class PortfolioOpt:
         # Maximise the Sharpe Ratio
         # _raw_weights = ef.max_sharpe()
 
-        cleaned_weights = ef.clean_weights()
+        cleaned_weights = ef.clean_weights(cutoff=1e-4, rounding=2)
         non_zero_weights = dict(filter(lambda w: w[1] > 0.0, cleaned_weights.items()))
         # Calculating sharpe ratios of above portfolio
         mu, sigma, sharpe = ef.portfolio_performance()
@@ -153,6 +158,7 @@ class PortfolioOpt:
             analysis_range_begin,
             analysis_range_end,
             non_zero_weights)
+        proper_weights = {x[0]: y for x, y in cleaned_weights.items()}
         # Prepare list to pass to ui api
         p_list = []
         p_list.append("Period: {} - {}".format(str(range_begin), str(range_end)))
@@ -163,7 +169,7 @@ class PortfolioOpt:
         for key, value in sorted(non_zero_weights.items(), key=lambda kv: -kv[1]):
             p_list.append("{}: {:.2f}%".format(str(key[0]), 100 * value))
 
-        return non_zero_weights, p_list
+        return proper_weights, p_list
 
     # endregion
 
