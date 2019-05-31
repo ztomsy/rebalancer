@@ -9,7 +9,7 @@ import curses
 from time import strftime, localtime
 
 
-class UI_curses:
+class uiCurses:
 
     def __init__(self):
         # Load curses
@@ -26,21 +26,61 @@ class UI_curses:
         self.screen_data = [' ', ]
         # Init curses screen
         try:
-            self.stdscr = curses.initscr()
-            curses.cbreak()
-            self.stdscr.keypad(1)
-            curses.echo()
-            self.stdscr.scrollok(1)
-            # Start colors in curses
-            curses.start_color()
-            curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
-            curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
-            curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
-            curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_WHITE)
+            self.stdscr = self.setup()
+            # self.stdscr = curses.initscr()
+            # curses.cbreak()
+            # self.stdscr.keypad(1)
+            # curses.echo()
+            # self.stdscr.scrollok(1)
+            # self.initcolors()
         except Exception as e:
             # TODO Discover new exception behavior if STDOUT is not a TTY.
             # print(type(e).__name__, e.args, str(e))
             pass
+
+    def setup(self):
+        """
+         Sets environment up and creates main window
+         :returns: the main window object
+        """
+        # setup the console
+        mmask = curses.ALL_MOUSE_EVENTS  # for now accept all mouse events
+        main = curses.initscr()  # get a window object
+        y, x = main.getmaxyx()  # get size
+        if y < 24 or x < 80:  # verify minimum size rqmts
+            raise RuntimeError("Terminal must be at least 80 x 24")
+        curses.noecho()  # turn off key echoing
+        curses.cbreak()  # turn off key buffering
+        curses.mousemask(mmask)  # accept mouse events
+        self.initcolors()  # turn on and set color pallet
+        main.keypad(1)  # let curses handle multibyte special keys
+        main.scrollok(1)
+        curses.curs_set(0)  # hide the cursor
+        main.refresh()  # and show everything
+        return main
+
+    def teardown(self):
+        """
+         Returns console to normal state
+        """
+        # tear down the console
+        curses.nocbreak()
+        if self.stdscr:
+            self.stdscr.keypad(0)
+        curses.echo()
+        curses.endwin()
+
+    def initcolors(self):
+        """
+        Initialize color pallet
+        """
+        curses.start_color()
+        if not curses.has_colors():
+            raise RuntimeError("Sorry. Terminal does not support colors")
+        curses.init_pair(1, curses.COLOR_CYAN, curses.COLOR_BLACK)
+        curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
+        curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
+        curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_WHITE)
 
     def reload_ui(self, **kwargs):
         self.push_data(**kwargs)
@@ -90,7 +130,12 @@ class UI_curses:
     def print_ui(self):
         try:
             # region Preparing
-            self.stdscr.erase()
+            self.stdscr.clear()  # erase everything
+            # TODO Add border
+            # self.stdscr.attron(curses.color_pair(4))  # make the border red
+            # self.stdscr.border(1)  # place the border
+            # self.stdscr.attroff(curses.color_pair(4))  # turn off the red
+            # self.stdscr.erase()
             height, width = self.stdscr.getmaxyx()
             dash = '─' * (width - 1) + '\n'
             # Perform safe crop to avoid drawing problem
