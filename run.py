@@ -2,6 +2,7 @@
 # encoding: utf-8
 import time
 import sys
+from logging import DEBUG
 
 from yat.settingsWatcher import settingsWatcher
 from payload.runner import Runner
@@ -13,7 +14,7 @@ watcher = settingsWatcher()
 settings = watcher.settings
 
 # Init logger and define log_level verbosity
-logger = logger.setup_custom_logger('Rebalancer', log_level=settings['LOG_LEVEL'])
+logger = logger.setup_custom_logger('Rebalancer', log_level=DEBUG)
 
 
 if __name__ == '__main__':
