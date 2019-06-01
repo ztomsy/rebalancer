@@ -4,7 +4,6 @@
 from time import sleep, time_ns, time, ctime
 from sys import exit
 from random import randrange
-from datetime import datetime, timedelta
 
 from binance.restclient import RestClient
 from payload.trader import Trader
@@ -17,6 +16,12 @@ from payload.portfolioOpt import PortfolioOpt
 class Runner(object):
     """
     Init and run main loop
+    >>>r=Runner
+    >>>r.balances = {}
+    >>>r._count_base_balance('')
+
+
+
     """
 
     def __init__(self, logger: object = None, watcher: object = None, **kwargs):
@@ -39,10 +44,11 @@ class Runner(object):
         self.scindex_markets = None
         self.scindex_tickers = None
         # Init portfolio
+        self.portfolio_ohlcv = {}
         self.rebalancing_precision = kwargs['REBALANCING_PRECISION']
         self.portfolio = kwargs['PORTFOLIO']
         self.portfolio_base_asset = kwargs['PORTFOLIO_BASE_ASSET']
-        self.portfolio_base_volume: float = 0
+        self.portfolio_base_amount: float = 0
         self.portfolio_assets = [x for x in self.portfolio.keys()]
         self.portfolio_weight_bounds = kwargs['WEIGHT_BOUNDS']
         self.portfolio_target_return = kwargs['TARGET_RETURN']
@@ -54,7 +60,7 @@ class Runner(object):
         self.quote_collector = []
 
         self.run_step = 0
-        self.balances = []
+        self.balances = {}
 
         # Initialise exchanges
         self.data_provider_list = []
@@ -125,7 +131,25 @@ class Runner(object):
                     else:
                         return amount*self.portfolio_ohlcv[m][-1][4]
 
-    def _count_base_balance(self, asset):
+    def _count_symbol_amount(self, symbol_base, amount):
+        """
+        Count amount of symbol_base currency from portfolio_base_asset amount
+        :return: amount quoted in symbol_base asset
+        :rtype: float
+        """
+        amount = amount
+        ra = amount / self.exchange1.all_tickers["{}/{}".format(symbol_base, self.portfolio_base_asset)]['ask']
+        return ra
+
+    def _count_base_balance(self, asset: str) -> float:
+        """
+        Count asset in portfolio_base_asset amount.
+
+        :param asset: asset name
+        :type asset: str
+        :return: amount counted in base asset price
+        :rtype: float
+        """
         try:
             if asset == self.portfolio_base_asset:
                 base_balance = self.balances[asset]['all']
@@ -137,30 +161,37 @@ class Runner(object):
                     "{}/{}".format(asset, self.portfolio_base_asset)][-1][4]
             return base_balance
         except KeyError:
-            return 0
+            return 0.0
+
+    def _count_portfolio_base_amount(self):
+        pbv = 0
+        for c in self.portfolio_assets:
+            pbv += self._count_base_balance(c)
+        self.portfolio_base_amount = pbv
 
     def _update_portfolio_data(self):
         self.ui.portfolio_data.clear()
         self.portfolio_current_weights.clear()
         self.ui.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'MIN%', 'CURRENT%', 'MAX%'],]
-        pbv = 0
-        for c in self.portfolio_assets:
-            pbv += self._count_base_balance(c)
         for c in self.portfolio_assets:
             try:
                 balance_all = self.balances[c]['all']
             except KeyError:
                 balance_all = 0
             base_balance = float(self._count_base_balance(c))
+            try:
+                bp = base_balance / self.portfolio_base_amount
+            except ZeroDivisionError:
+                bp = 0
             self.ui.portfolio_data.append([c, 'binance', "{:.4f}".format(balance_all),
                                         "{:.2f}".format(base_balance),
                                         "{:.2f}".format(100 * self.portfolio[c][0]),
-                                        "{:.2f}".format(100 * base_balance/pbv),
+                                        "{:.2f}".format(100 * bp),
                                         "{:.2f}".format(100 * self.portfolio[c][1])])
-            self.portfolio_current_weights[c] = base_balance/pbv
-        self.portfolio_base_volume = pbv
+            # FIXME Move weight count to separate method
+            self.portfolio_current_weights[c] = base_balance/self.portfolio_base_amount
         self.ui.portfolio_data.append(['ALL', 'binance', '-',
-                                    "{:.2f}".format(pbv), '-', '-', '-', ])
+                                    "{:.2f}".format(self.portfolio_base_amount), '-', '-', '-', ])
     # endregion
 
     # region Price change data
@@ -213,12 +244,11 @@ class Runner(object):
         """
         # Check for all_tickers and fetch if they are empty
         if not(isinstance(self.exchange1.all_tickers, dict)):
-            self.logger.info('Exchange tickers are empty, fetching again...')
+            self.logger.info('Exchange tickers are empty, fetching...')
             self.exchange1.process_tickers()
             t = self.exchange1.all_tickers.copy()
         else:
             t = self.exchange1.all_tickers.copy()
-
         if not(isinstance(self.portfolio_difference, dict)):
             self.logger.info("Portfolio difference dict are empty")
             return False
@@ -227,15 +257,18 @@ class Runner(object):
             return False
         else:
             d = self.portfolio_difference
-
         if not(isinstance(self.exchange1.balances, dict)):
-            self.logger.info('Balances are empty, fetching again...')
+            self.logger.info('Balances are empty, fetching...')
             self.exchange1.fetch_balances()
             b = self.exchange1.balances
         else:
             b = self.exchange1.balances
-
-        # Define cross markets to avoid extra comission on rebalancing
+        for i in self.portfolio_difference.keys():
+            if i not in b.keys():
+                b[i] = {'free': 0, "locked": 0, "all": 0}
+                # self.logger.info("No balance for some assets!")
+                # return False
+        # Define cross markets to avoid extra commission on rebalancing
         pcmall = ["{}/{}".format(x, y) for x in d for y in d]
         pcmall_s = [x for x in pcmall if x in t.keys()]
         # Filter for rebalancing_precision
@@ -243,47 +276,59 @@ class Runner(object):
         rw_neg = {}
         pos_cumsum = 0
         neg_cumsum = 0
+        # Create dict with portfolio_base_amount and filter zero weights
         for a, w in d.items():
             if abs(w) >= self.rebalancing_precision:
                 _ = {'rebal_target': w,
-                         'free': b[a]['free'],
-                         'locked': b[a]['locked'],
-                         'all': b[a]['all'],
-                         'base_amount': w * self.portfolio_base_volume}
+                     'free': b[a]['free'],
+                     'locked': b[a]['locked'],
+                     'all': b[a]['all'],
+                     'base_amount': w * self.portfolio_base_amount}
                 if w > 0:
                     rw_pos[a] = _
                     pos_cumsum += abs(w)
                 elif w < 0:
                     rw_neg[a] = _
                     neg_cumsum += abs(w)
+        # Iterate by positive weights and match with negative weights assets
+        # Define amount to trade founding min of base_amount
+        # Convert base amount to proper amount for symbol
+        # Define price and other orders params
+        # !!!Avoid refactoring before implementing non base assets!!!
         for a, b in rw_pos.items():
             for c, d in rw_neg.items():
                 if "{}/{}".format(a, c) in pcmall_s:
+                    symbol = "{}/{}".format(a, c)
                     base_amount = min(abs(b['base_amount']), abs(d['base_amount']))
-                    self.quote_collector.append({'symbol': '{}/{}'.format(a, c),
-                                                 'type': 'LIMIT',
-                                                 'side': 'BUY',
-                                                 # 'amount': base_amount,
-                                                 'amount': rounded_to_precision(
-                                                         base_amount/t["{}/{}".format(a, c)]['ask'], 8),
-                                                 'price': t["{}/{}".format(a, c)]['ask'],
-                                                 'timeInForce': 'GTC'})
+                    price = t[symbol]['ask']
+                    amount = rounded_to_precision(self._count_symbol_amount(a, base_amount), 8)
+                    # Avoid small amount quotes
+                    if amount < 1e-6:
+                        break
+                    side = 'BUY'
+                    type = 'LIMIT'
+                    timeInForce = 'GTC'
+                    self.quote_collector.append({'symbol': symbol, 'type': type, 'side': side,
+                                                 'amount': amount, 'price': price, 'timeInForce': timeInForce})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
                 elif "{}/{}".format(c, a) in pcmall_s:
+                    symbol = "{}/{}".format(c, a)
                     base_amount = min(abs(b['base_amount']), abs(d['base_amount']))
-                    btc_amount = self._count_btc_balance(base_amount, self.portfolio_base_asset)
-                    self.quote_collector.append({'symbol': '{}/{}'.format(c, a),
-                                                 'type': 'LIMIT',
-                                                 'side': 'SELL',
-                                                 'amount': rounded_to_precision(
-                                                         btc_amount/t["{}/{}".format(c, a)]['bid'], 8),
-                                                 'price': t["{}/{}".format(c, a)]['bid'],
-                                                 'timeInForce': 'GTC'})
+                    price = t[symbol]['bid']
+                    amount = rounded_to_precision(self._count_symbol_amount(c, base_amount), 8)
+                    # Avoid small amount quotes
+                    if amount < 1e-6:
+                        break
+                    side = 'SELL'
+                    type = 'LIMIT'
+                    timeInForce = 'GTC'
+                    self.quote_collector.append({'symbol': symbol, 'type': type, 'side': side,
+                                                 'amount': amount, 'price': price, 'timeInForce': timeInForce})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
                 else:
-                    self.logger.error("No market for trading our assets")
+                    self.logger.error("No market for trading assets")
         # Check for empty recommendations lists
         rw_pos.update(rw_neg)
         for x, y in rw_pos.items():
@@ -329,19 +374,20 @@ class Runner(object):
                     self.ui.reload_ui(statusbar_str="Load tickers")
                     # Perform checking connections and previous lag
                     # self.exchange1.sanity_check()
-                    # Load and preprocess last tickers prices
-                    self.exchange1.process_tickers(self.scindex_markets)
+                    # Load and preprocess last tickers price
+                    self.exchange1.process_tickers()
                     # Add index data to list
                     self._update_index_data()
                     # Fill ohlcv data
                     self.ui.reload_ui(statusbar_str="Load ohlcv")
-                    self.portfolio_ohlcv = {}
+                    self.portfolio_ohlcv.clear()
                     for _ in self.portfolio_base_markets:
                         self.portfolio_ohlcv[_] = self.exchange1.get_ohlcv(_, timeframe='1h', limit=200)
                     # Fill balances data
                     self.ui.reload_ui(statusbar_str="Load balances")
                     self.exchange1.fetch_balances()
                     self.balances = {x: y for x, y in self.exchange1.balances.items() if x in self.portfolio_assets}
+                    self._count_portfolio_base_amount()
                     # Add data to lists for ui
                     self._update_pctchange_data()
                     self._update_portfolio_data()
@@ -381,14 +427,13 @@ class Runner(object):
             self.ui.reload_ui(statusbar_str="Proceed orders")
             self._proceed_orders()
 
-            self.ui.reload_ui(statusbar_str="OK")
-            self.run_step += 1
             self.ui.reload_ui(statusbar_str="Check settings file")
             if self.file_watcher.look():
                 # Re init Runner with new settings
                 self.__init__(logger=self.logger,
                               watcher=self.file_watcher,
                               **self.file_watcher.settings)
+            self.run_step += 1
             self.ui.reload_ui(statusbar_str="OK")
             # Wait for sleep timeout
             # sleep(1)
