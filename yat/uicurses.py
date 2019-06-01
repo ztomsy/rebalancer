@@ -7,6 +7,7 @@ Check print_ui for current ui implementation
 
 import curses
 from time import strftime, localtime
+from yat.shared import Side, OType, TIFType
 
 
 class uiCurses:
@@ -114,7 +115,7 @@ class uiCurses:
             for j in range(0, len(data[i])):
                 if self.check_string_to_float(data[i][j]):
                     data_ij = float(data[i][j])
-                    if data_ij >= 0:
+                    if data_ij >= -0.05:
                         self.stdscr.addstr("{:^10s}".format(str(data[i][j])), curses.color_pair(3))
                     else:
                         self.stdscr.addstr("{:^10s}".format(str(data[i][j])), curses.color_pair(2))
