@@ -166,9 +166,11 @@ class PortfolioOpt:
         p_list.append("Expected return: {:.2f}%".format(100 * mu))
         p_list.append("Volatility: {:.2f}%".format(100 * sigma))
         p_list.append("Sharpe Ratio: {:.2f}".format(sharpe))
-        for key, value in sorted(non_zero_weights.items(), key=lambda kv: -kv[1]):
-            p_list.append("{}: {:.2f}%".format(str(key[0]), 100 * value))
-
+        # for key, value in sorted(non_zero_weights.items(), key=lambda kv: -kv[1]):
+        #     p_list.append("{}: {:.2f}%".format(str(key[0]), 100 * value))
+        rebal_str = ["{}:{:.2f}%".format(str(k[0]), 100 * v) for k, v in sorted(non_zero_weights.items(),
+                                                                                 key=lambda kv: -kv[1])]
+        p_list.append(rebal_str)
         return proper_weights, p_list
 
     # endregion
