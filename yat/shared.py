@@ -1,12 +1,16 @@
 from enum import Enum
 
+
 class Side(Enum):
-    BID = 1
-    ASK = 2
+    BUY = 'BUY'
+    SELL = 'SELL'
+
 
 class OType(Enum):
-    ADD = 1
-    CANCEL = 2
-    MODIFY = 3
+    LIMIT = 'LIMIT'
+    MARKET = 'MARKET'
 
-    
+
+class TIFType(Enum):
+    GTC = 'GTC'
+    IOC = 'IOC'
