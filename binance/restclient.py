@@ -4,7 +4,6 @@ import ccxt
 import sys
 from time import time_ns
 
-from yat.shared import Side, OType
 from yat.calcus import rounded_to_precision
 from payload.orderbook import Orderbook
 
@@ -47,29 +46,28 @@ class RestClient:
         self.balances = list()
 
     # region Order
-    def create_order(self, symbol, side: Side, order_type: OType, quantity, price=None, new_client_order_id=None,
-                     stop_price=None,
-                  iceberg_qty=None):
+    def create_order(self, symbol: str, side: str, type: str, amount,
+                     price=None, timeInForce=None, stop_price=None,
+                     iceberg_qty=None, client_order_id=None,):
         """ Submit a new order
-
         :param symbol: the market symbol (ie: BNBBTC)
         :param side: "BUY" or "SELL"
-        :param order_type: "LIMIT" or "MARKET"
-        :param quantity: the amount to buy/sell
+        :param type: "LIMIT" or "MARKET"
+        :param amount: the amount to buy/sell
         :param price: the price to buy/sell at, used in LIMIT order type
-        :param new_client_order_id: A unique id for the order. Automatically generated if not sent (optional)
-
+        :param client_order_id: A unique id for the order. Automatically generated if not sent (optional)
+        :param timeInForce: 'GTC' = Good Till Cancel(default), 'IOC' = Immediate Or Cancel
         :param stop_price: Used with stop orders (optional)
         :param iceberg_qty: Used with iceberg orders (optional)
         :return: response from an exchange with order data(orderID, etc.)
         """
         try:
             order_c = self.exchange.create_order(symbol=symbol,
-                                                 type=order_type,
+                                                 type=type,
                                                  side=side,
-                                                 amount=quantity,
+                                                 amount=amount,
                                                  price=price,
-                                                 timeInForce="GTC",  # 'GTC' = Good Till Cancel(default), 'IOC' = Immediate Or Cancel
+                                                 timeInForce=timeInForce,
                                                  stopPrice=stop_price,
                                                  iceberQty=iceberg_qty)
             return order_c
@@ -80,8 +78,20 @@ class RestClient:
             sys.exit()
 
     def place_multiple_orders(self, quotes: list):
-
-        pass
+        """
+        Feed with quotes
+        TODO Add quotes to order_history, _lookup and confirm_trade_collector
+        :param quotes:
+        :return:
+        """
+        # TODO Add OrderId as index
+        for q in quotes:
+            # self.confirm_trade_collector.append(q)
+            # self.order_history.append(q)
+            # self._lookup[q['symbol']] = q
+            response = self.create_order(**q)
+            self.order_history.append(response)
+        return []
 
     def add_order_to_history(self, order):
         '''Add an order (dict) to order_history'''
@@ -111,16 +121,16 @@ class RestClient:
             if (float(x['free']) > 0) or (float(x['locked']) > 0):
                 filtered_balances[x['asset']] = {'free': x['free'],
                                                  'locked': x['locked'],
-                                                 'all': float(x['free'])+ float(x['locked'])}
+                                                 'all': float(x['free']) + float(x['locked'])}
         return filtered_balances
 
     def fetch_balances(self):
-        '''
-        Fetch presented balances
-        :return:
-        '''
+        """
+        Fetch and filter not null balances
+        """
         try:
             result = self.exchange.fetch_balance()
+            # self.balances = result
             self.balances = self._filter_not_null(result)
         except Exception as e:
             # print(type(e).__name__, e.args, str(e))
@@ -220,7 +230,8 @@ class RestClient:
         Call http api for all tickers data.
         Delete empty responses from all_tickers dict.
         Calculate inplace data for tickers and add timestamp of calculation.
-        :param tickers:
+        :param tickers: pass tickers list to process only that tickers
+        :type tickers: list
         """
         self.get_all_tickers()
         self.clear_empty_tickers()
