@@ -43,7 +43,8 @@ class settingsWatcher(object):
         for name in names:
             globals()[name] = getattr(sys.modules[module_name], name)
 
-    # Build and return a dict of settings from imported module
     def build_dict(self):
+        """Build and return a dict of settings from imported module
+        """
         return {attr: getattr(_settings, attr) for attr in dir(_settings) if not callable(
                 getattr(_settings, attr)) and not attr.startswith("__")}
