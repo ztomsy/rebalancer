@@ -3,9 +3,9 @@
 
 from time import sleep, time_ns, time, ctime
 from sys import exit
-from random import randrange
+from random import randrange, seed
 
-from binance.restclient import RestClient
+from binance.restclient import RestClient as binanceRestClient
 from payload.trader import Trader
 from yat.uicurses import uiCurses, curses
 from yat.influx import Influx
@@ -64,33 +64,32 @@ class Runner(object):
 
         # Initialise exchanges
         self.data_provider_list = []
-        self.exchange1 = RestClient(window=kwargs['AUTH_DATA']['binance']['window'],
-                                    api_key=kwargs['AUTH_DATA']['binance']['api_key'],
-                                    secret=kwargs['AUTH_DATA']['binance']['secret'],
-                                    verbose=False,
-                                    logger=logger)
-        # TODO Add data provider list
-        self.data_provider_list.append('binance')
-        # self.data_provider_list.append(['binance', self.exchange1])
+        self.exchange = binanceRestClient(window=kwargs['AUTH_DATA']['binance']['window'],
+                                          api_key=kwargs['AUTH_DATA']['binance']['api_key'],
+                                          secret=kwargs['AUTH_DATA']['binance']['secret'],
+                                          verbose=False,
+                                          logger=logger)
+        self.data_provider_list.append(self.exchange.exchange_name)
+        # self.data_provider_list.append([self.exchange.exchange_name, self.exchange])
         # Load index markets
-        self.scindex_markets = [x for x, y in self.exchange1.markets.items() if (y['base'] in self.scindex and y[
+        self.scindex_markets = [x for x, y in self.exchange.markets.items() if (y['base'] in self.scindex and y[
             'quote'] == 'BTC') or (y['quote'] in self.scindex and y['base'] == 'BTC')]
         # Get all tickers
-        self.exchange1.process_tickers()
+        self.exchange.process_tickers()
         # Sort only open markets
-        self.scindex_tickers = {x for x in self.scindex_markets if self.exchange1.all_tickers[x]['askVolume'] > 0 and
-                                self.exchange1.all_tickers[x]['askVolume'] > 0}
+        self.scindex_tickers = {x for x in self.scindex_markets if self.exchange.all_tickers[x]['askVolume'] > 0 and
+                                self.exchange.all_tickers[x]['askVolume'] > 0}
         # After filtering tickers, combine new index markets
         self.scindex_markets = [x for x in self.scindex_markets if x in
                                 self.scindex_tickers]
-        self.exchange1.calc_tickers(self.scindex_markets)
+        self.exchange.calc_tickers(self.scindex_markets)
         # Get portfolio markets
-        self.portfolio_base_markets = [x for x, y in self.exchange1.markets.items() if (y['base'] in self.portfolio_assets
-                                                                                        and y['quote'] ==
-                                                                                        self.portfolio_base_asset) or (y['quote'] in self.portfolio_assets
+        self.portfolio_base_markets = [x for x, y in self.exchange.markets.items() if (y['base'] in self.portfolio_assets
+                                                                                       and y['quote'] ==
+                                                                                       self.portfolio_base_asset) or (y['quote'] in self.portfolio_assets
                                                                                         and y['base'] ==
                                                                                         self.portfolio_base_asset)]
-        self.exchange1.calc_tickers(self.portfolio_base_markets)
+        self.exchange.calc_tickers(self.portfolio_base_markets)
 
         # Run main loop and close threads on exit
         try:
@@ -103,15 +102,15 @@ class Runner(object):
                 pass
             # self.logger.info("Shutdown application")
             # self.exchange2.execute.shutdown()
-            # self.exchange1.order_history_to_pickle(self.cache_path)
+            # self.exchange.order_history_to_pickle(self.cache_path)
 
     # region Index data
     def _update_index_data(self):
         self.ui.index_data.clear()
         self.ui.index_data = [['NAME', 'PROVIDER', 'TOB ASK', 'TOB BID', 'MID', 'SPREAD', 'SPREAD%'], ]
         for s in self.scindex_markets:
-            ticker = self.exchange1.all_tickers[s]
-            self.ui.index_data.append([s, 'binance',
+            ticker = self.exchange.all_tickers[s]
+            self.ui.index_data.append([s, self.exchange.exchange_name,
                                        "{:.2f}".format(ticker['ask']),
                                        "{:.2f}".format(ticker['bid']),
                                        "{:.2f}".format(ticker['mid_price']),
@@ -138,7 +137,7 @@ class Runner(object):
         :rtype: float
         """
         amount = amount
-        ra = amount / self.exchange1.all_tickers["{}/{}".format(symbol_base, self.portfolio_base_asset)]['ask']
+        ra = amount / self.exchange.all_tickers["{}/{}".format(symbol_base, self.portfolio_base_asset)]['ask']
         return ra
 
     def _count_base_balance(self, asset: str) -> float:
@@ -169,10 +168,15 @@ class Runner(object):
             pbv += self._count_base_balance(c)
         self.portfolio_base_amount = pbv
 
+    def _update_portfolio_current_weights(self):
+        self.portfolio_current_weights.clear()
+        for c in self.portfolio_assets:
+            base_balance = float(self._count_base_balance(c))
+            self.portfolio_current_weights[c] = base_balance/self.portfolio_base_amount
+
     def _update_portfolio_data(self):
         self.ui.portfolio_data.clear()
-        self.portfolio_current_weights.clear()
-        self.ui.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'MIN%', 'CURRENT%', 'MAX%'],]
+        self.ui.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'CURRENT%', 'RECOMMEND%', 'DIF%'], ]
         for c in self.portfolio_assets:
             try:
                 balance_all = self.balances[c]['all']
@@ -183,15 +187,21 @@ class Runner(object):
                 bp = base_balance / self.portfolio_base_amount
             except ZeroDivisionError:
                 bp = 0
-            self.ui.portfolio_data.append([c, 'binance', "{:.4f}".format(balance_all),
-                                        "{:.2f}".format(base_balance),
-                                        "{:.2f}".format(100 * self.portfolio[c][0]),
-                                        "{:.2f}".format(100 * bp),
-                                        "{:.2f}".format(100 * self.portfolio[c][1])])
-            # FIXME Move weight count to separate method
-            self.portfolio_current_weights[c] = base_balance/self.portfolio_base_amount
-        self.ui.portfolio_data.append(['ALL', 'binance', '-',
-                                    "{:.2f}".format(self.portfolio_base_amount), '-', '-', '-', ])
+            try:
+                recw = self.portfolio_recommended_weights[c]
+                difw = self.portfolio_difference[c]
+            except KeyError:
+                recw = 0
+                difw = 0
+            self.ui.portfolio_data.append([c, self.exchange.exchange_name,
+                                           "{:.4f}".format(balance_all),
+                                           "{:.2f}".format(base_balance),
+                                           "{:.2f}".format(100 * bp),
+                                           "{:.2f}".format(100 * recw),
+                                           "{:.2f}".format(100 * difw)])
+        self.ui.portfolio_data.append(['ALL', self.exchange.exchange_name, '-',
+                                       "{:.2f}".format(self.portfolio_base_amount), '-', '-', '-', ])
+
     # endregion
 
     # region Price change data
@@ -243,12 +253,12 @@ class Runner(object):
         Fill quote_collector with necessary quotes.
         """
         # Check for all_tickers and fetch if they are empty
-        if not(isinstance(self.exchange1.all_tickers, dict)):
+        if not(isinstance(self.exchange.all_tickers, dict)):
             self.logger.info('Exchange tickers are empty, fetching...')
-            self.exchange1.process_tickers()
-            t = self.exchange1.all_tickers.copy()
+            self.exchange.process_tickers()
+            t = self.exchange.all_tickers.copy()
         else:
-            t = self.exchange1.all_tickers.copy()
+            t = self.exchange.all_tickers.copy()
         if not(isinstance(self.portfolio_difference, dict)):
             self.logger.info("Portfolio difference dict are empty")
             return False
@@ -257,12 +267,12 @@ class Runner(object):
             return False
         else:
             d = self.portfolio_difference
-        if not(isinstance(self.exchange1.balances, dict)):
+        if not(isinstance(self.exchange.balances, dict)):
             self.logger.info('Balances are empty, fetching...')
-            self.exchange1.fetch_balances()
-            b = self.exchange1.balances
+            self.exchange.fetch_balances()
+            b = self.exchange.balances
         else:
-            b = self.exchange1.balances
+            b = self.exchange.balances
         for i in self.portfolio_difference.keys():
             if i not in b.keys():
                 b[i] = {'free': 0, "locked": 0, "all": 0}
@@ -307,9 +317,8 @@ class Runner(object):
                         break
                     side = 'BUY'
                     type = 'LIMIT'
-                    timeInForce = 'GTC'
                     self.quote_collector.append({'symbol': symbol, 'type': type, 'side': side,
-                                                 'amount': amount, 'price': price, 'timeInForce': timeInForce})
+                                                 'amount': amount, 'price': price})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
                 elif "{}/{}".format(c, a) in pcmall_s:
@@ -322,9 +331,8 @@ class Runner(object):
                         break
                     side = 'SELL'
                     type = 'LIMIT'
-                    timeInForce = 'GTC'
                     self.quote_collector.append({'symbol': symbol, 'type': type, 'side': side,
-                                                 'amount': amount, 'price': price, 'timeInForce': timeInForce})
+                                                 'amount': amount, 'price': price})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
                 else:
@@ -346,19 +354,28 @@ class Runner(object):
             if len(self.quote_collector) > 0:
                 quotes_info = ["{} {} {}@{}".format(x['side'], x['symbol'],
                                                     x['amount'], x['price']) for x in self.quote_collector]
-                self.ui.reload_ui(screen_data=self.ui.screen_data.extend(quotes_info))
+                self.ui.reload_ui(screen_data=quotes_info)# self.ui.screen_data.extend(quotes_info))
                 if self.dry_run:
                     self.quote_collector.clear()
                 else:
                     # Place real orders with order manager
-                    # Return empty list as return
-                    self.quote_collector = self.exchange1.place_multiple_orders(self.quote_collector)
+                    # on True clear quote_collector
+                    if self.exchange.place_multiple_orders(self.quote_collector):
+                        self.quote_collector.clear()
         else:
             self.logger.info("Quote collector is empty")
     # endregion
 
     def _wait_timeout(self):
+        """
+        Check if reload timeout passed
+        Use random generator and random seed equal time
+
+        :return : True if timeout passed, False otherwise
+        :rtype: bool
+        """
         now_time = int(time()-1)
+        seed(now_time)
         if (now_time - self.last_fetch_time > (randrange(40, 60))) or self.run_step == 0:
             self.last_fetch_time = now_time
             return True
@@ -373,21 +390,22 @@ class Runner(object):
                 if t == 'binance' and self._wait_timeout():
                     self.ui.reload_ui(statusbar_str="Load tickers")
                     # Perform checking connections and previous lag
-                    # self.exchange1.sanity_check()
+                    # self.exchange.sanity_check()
                     # Load and preprocess last tickers price
-                    self.exchange1.process_tickers()
+                    self.exchange.process_tickers()
                     # Add index data to list
                     self._update_index_data()
                     # Fill ohlcv data
                     self.ui.reload_ui(statusbar_str="Load ohlcv")
                     self.portfolio_ohlcv.clear()
                     for _ in self.portfolio_base_markets:
-                        self.portfolio_ohlcv[_] = self.exchange1.get_ohlcv(_, timeframe='1h', limit=200)
+                        self.portfolio_ohlcv[_] = self.exchange.get_ohlcv(_, timeframe='1h', limit=200)
                     # Fill balances data
                     self.ui.reload_ui(statusbar_str="Load balances")
-                    self.exchange1.fetch_balances()
-                    self.balances = {x: y for x, y in self.exchange1.balances.items() if x in self.portfolio_assets}
+                    self.exchange.fetch_balances()
+                    self.balances = {x: y for x, y in self.exchange.balances.items() if x in self.portfolio_assets}
                     self._count_portfolio_base_amount()
+                    self._update_portfolio_current_weights()
                     # Add data to lists for ui
                     self._update_pctchange_data()
                     self._update_portfolio_data()
@@ -402,17 +420,20 @@ class Runner(object):
                             frequency=d_frequency,
                             target_return=self.portfolio_target_return,
                             target_risk=self.portfolio_target_risk)
-                    self.ui.reload_ui(screen_data=p_list)
+                    self.ui.reload_ui(portfolio_opt_data=p_list)
                     # Compare current and recommended weights
-                    self._compare_weights(self.portfolio_current_weights,
-                                                       self.portfolio_recommended_weights)
-                    # Calculate recommendations
+                    self._compare_weights(self.portfolio_current_weights, self.portfolio_recommended_weights)
+                    # Reload ui with new recommendations data
+                    self._update_portfolio_data()
+                    # Add settings and portfolio recommendations data screen
+                    self.ui.reload_ui(portfolio_opt_data=p_list)
+                    # Generate quotes
                     self.ui.reload_ui(statusbar_str="Generate quotes")
                     self._generate_quotes()
-                    # Generate quotes
 
                 if t == 'kucoin':
                     pass
+
                 if t == 'twim':
                     pass
 
@@ -439,6 +460,6 @@ class Runner(object):
             # Wait for sleep timeout
             # sleep(1)
             # if (self.run_step % write_interval == 0) and (self.run_step != 0):
-            #     self.exchange1.tob_to_pickle(self.cache_path)
+            #     self.exchange.tob_to_pickle(self.cache_path)
 
     # endregion
