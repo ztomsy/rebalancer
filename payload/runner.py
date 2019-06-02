@@ -98,10 +98,10 @@ class Runner(object):
         finally:
             try:
                 curses.endwin()
-                self.logger.info("Closing curses")
+                # self.logger.info("Closing curses")
             finally:
                 pass
-            self.logger.info("Shutdown application")
+            # self.logger.info("Shutdown application")
             # self.exchange2.execute.shutdown()
             # self.exchange1.order_history_to_pickle(self.cache_path)
 
@@ -424,12 +424,13 @@ class Runner(object):
             # # Generate quotes
             #     self._generate_quotes()
             # Place an orders and clear quote collector on return
-            self.ui.reload_ui(statusbar_str="Proceed orders")
-            self._proceed_orders()
+            if len(self.quote_collector) != 0:
+                self.ui.reload_ui(statusbar_str="Proceed orders")
+                self._proceed_orders()
 
-            self.ui.reload_ui(statusbar_str="Check settings file")
             if self.file_watcher.look():
                 # Re init Runner with new settings
+                self.ui.reload_ui(statusbar_str="Reinit runner with new settings")
                 self.__init__(logger=self.logger,
                               watcher=self.file_watcher,
                               **self.file_watcher.settings)

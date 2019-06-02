@@ -28,16 +28,12 @@ class uiCurses:
         # Init curses screen
         try:
             self.stdscr = self.setup()
-            # self.stdscr = curses.initscr()
-            # curses.cbreak()
-            # self.stdscr.keypad(1)
-            # curses.echo()
-            # self.stdscr.scrollok(1)
-            # self.initcolors()
         except Exception as e:
-            # TODO Discover new exception behavior if STDOUT is not a TTY.
-            # print(type(e).__name__, e.args, str(e))
-            pass
+            if str(e) == "setupterm: could not find terminal":
+                self.stdscr = None
+            else:
+                print("Unexpected behaviour of STDOUT", str(e))
+                self.stdscr = None
 
     def setup(self):
         """
@@ -200,4 +196,4 @@ class uiCurses:
             self.stdscr.refresh()
 
         except Exception as e:
-            pass
+            print(strftime("%H:%M:%S", localtime()), self.statusbar_str)
