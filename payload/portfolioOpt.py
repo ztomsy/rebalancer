@@ -126,28 +126,23 @@ class PortfolioOpt:
                         frequency: int = None,
                         target_return: float = None,
                         target_risk: float = None):
-        # print(self.progress('Processing Pricing'))
         # Transform prices ohlcv data and add 1 price base asset column
         p_d = deepcopy(self.build_pricing_data_from_ohlcv(pricing_data, base_asset))
-
+        # Generate EfficientFrontier Portfolio
         analysis_range_begin, analysis_range_end, ef = self.generate_analysis_model(
                 p_d, weight_bounds, frequency)
         # Calculate the 'Markowitz portfolio', minimising volatility for a given target_return.
         # target_return: the desired return of the resulting portfolio
         if target_return is not None:
             _oer = ef.efficient_return(target_return=target_return)
-
         # Calculate the Sharpe-maximising portfolio for a given volatility(max return for a target_risk).
         # target_risk: the desired volatility of the resulting portfolio
         if target_risk is not None:
             _omw = ef.efficient_risk(target_risk=target_risk)
-
         # Minimise volatility
         # _raw_weights = ef.min_volatility()
-
         # Maximise the Sharpe Ratio
         # _raw_weights = ef.max_sharpe()
-
         cleaned_weights = ef.clean_weights(cutoff=1e-4, rounding=2)
         non_zero_weights = dict(filter(lambda w: w[1] > 0.0, cleaned_weights.items()))
         # Calculating sharpe ratios of above portfolio
@@ -162,15 +157,15 @@ class PortfolioOpt:
         # Prepare list to pass to ui api
         p_list = []
         p_list.append("Period: {} - {}".format(str(range_begin), str(range_end)))
-        p_list.append("Portfolio return: {:.2f}%".format(100 * wavg_return))
-        p_list.append("Expected return: {:.2f}%".format(100 * mu))
-        p_list.append("Volatility: {:.2f}%".format(100 * sigma))
-        p_list.append("Sharpe Ratio: {:.2f}".format(sharpe))
+        p_list.append("Bounds: {} Base: {} Freq: {}".format(weight_bounds, base_asset, frequency))
+        p_list.append("Target return: {} Target_risk: {}".format(target_return, target_risk))
+        p_list.append("Portfolio return: {:.2f}% Expected return: {:.2f}%".format(100 * wavg_return, 100 * mu))
+        p_list.append("Volatility: {:>10.2f}% Sharpe Ratio: {:>7.2f}".format(100 * sigma, sharpe))
         # for key, value in sorted(non_zero_weights.items(), key=lambda kv: -kv[1]):
         #     p_list.append("{}: {:.2f}%".format(str(key[0]), 100 * value))
-        rebal_str = ["{}:{:.2f}%".format(str(k[0]), 100 * v) for k, v in sorted(non_zero_weights.items(),
-                                                                                 key=lambda kv: -kv[1])]
-        p_list.append(rebal_str)
+        # rebal_str = ["{}:{:.2f}%".format(str(k[0]), 100 * v) for k, v in sorted(non_zero_weights.items(),
+        #                                                                          key=lambda kv: -kv[1])]
+        # p_list.append(rebal_str)
         return proper_weights, p_list
 
     # endregion
