@@ -20,10 +20,11 @@ class uiCurses:
         self.statusbar_str = 'Loading'
         self.index_data = [['NAME', 'PROVIDER', 'TOB ASK', 'TOB BID', 'MID', 'SPREAD', 'SPREAD%'],
                            ['-', '-', 0, 0, 0, 0, 0], ]
-        self.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'MIN%', 'CURRENT%', 'MAX%'],
-                           ['-', '-', 0, 0, 0, 0, 0], ]
+        self.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'CURRENT%', 'RECOMMEND%', 'DIF%'],
+                               ['-', '-', 0, 0, 0, 0, 0], ]
         self.pctchange_data = [['NAME', 'PROVIDER', '1H%', '3H%', '12H%', '24H%', '72H%'],
-                           ['-', '-', 0, 0, 0, 0, 0], ]
+                               ['-', '-', 0, 0, 0, 0, 0], ]
+        self.portfolio_opt_data = [' ', ]
         self.screen_data = [' ', ]
         # Init curses screen
         try:
@@ -85,12 +86,14 @@ class uiCurses:
 
     def push_data(self, statusbar_str: str = None, header_str: str = None,
                   index_data: list = None, portfolio_data: list = None,
-                  pctchange_data: list = None, screen_data: list = None):
+                  pctchange_data: list = None, portfolio_opt_data: list = None,
+                  screen_data: list = None):
         if header_str is not None: self.header_str = header_str
         if statusbar_str is not None: self.statusbar_str = statusbar_str
         if index_data is not None: self.index_data = index_data
         if portfolio_data is not None: self.portfolio_data = portfolio_data
         if pctchange_data is not None: self.pctchange_data = pctchange_data
+        if portfolio_opt_data is not None: self.portfolio_opt_data = portfolio_opt_data
         if screen_data is not None: self.screen_data = screen_data
 
     def print_table_header(self, data):
@@ -128,19 +131,17 @@ class uiCurses:
         try:
             # region Preparing
             self.stdscr.clear()  # erase everything
-            # TODO Add border
-            # self.stdscr.attron(curses.color_pair(4))  # make the border red
-            # self.stdscr.border(1)  # place the border
-            # self.stdscr.attroff(curses.color_pair(4))  # turn off the red
-            # self.stdscr.erase()
+            # Place the border
+            # self.stdscr.attron(curses.color_pair(4))
+            # self.stdscr.border(1)
+            # self.stdscr.attroff(curses.color_pair(4))
             height, width = self.stdscr.getmaxyx()
             dash = '─' * (width - 1) + '\n'
-            # Perform safe crop to avoid drawing problem
-            header_string = self.header_str[:width-1]
-            status_bar_string = self.statusbar_str[:width-1]
             # endregion
 
             # region Header
+            # Perform safe crop to avoid drawing problem
+            header_string = self.header_str[:width - 1]
             # Turning on attributes for Header
             self.stdscr.attron(curses.color_pair(4))
             self.stdscr.attron(curses.A_BOLD)
@@ -154,7 +155,7 @@ class uiCurses:
             # endregion
 
             #region Body
-            # Portfolio data
+            # Index data header
             self.stdscr.addstr(1, 0, dash)
             self.print_table_header(self.index_data)
             # Index data body
@@ -172,6 +173,9 @@ class uiCurses:
             # Pctchange body
             self.stdscr.addstr(dash)
             self.print_table_body(self.pctchange_data)
+            # Portfolio optimization settings and results
+            self.stdscr.addstr(dash)
+            self.print_screen(self.portfolio_opt_data)
             # Screen body
             self.stdscr.addstr(dash)
             self.print_screen(self.screen_data)
@@ -181,6 +185,8 @@ class uiCurses:
             # Prepare statusbar from provided message and other attributes
             statusbar_time_str = strftime("%H:%M:%S", localtime())
             statusbar_p_string = "Server time: {} | Status: {} | ".format(statusbar_time_str, self.statusbar_str)
+            # Perform safe crop to avoid drawing problem
+            statusbar_p_string = statusbar_p_string[:width - 1]
             # Turning on attributes for status bar
             self.stdscr.attron(curses.color_pair(4))
             self.stdscr.attron(curses.A_BOLD)
@@ -192,6 +198,7 @@ class uiCurses:
             self.stdscr.attroff(curses.color_pair(4))
             self.stdscr.attroff(curses.A_BOLD)
             # endregion
+
             # Refresh the screen
             self.stdscr.refresh()
 
