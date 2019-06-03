@@ -1,6 +1,5 @@
 # Your stuff
 *.dot
-*.png
 _private
 __pycache__
 .idea/
