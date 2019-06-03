@@ -33,6 +33,8 @@ class Runner(object):
         self.file_watcher.look()
         self.last_fetch_time = int(time())
         self.dry_run = kwargs['DRY_RUN']
+        self.loop_interval = kwargs['LOOP_INTERVAL']
+        self.market_only = kwargs['MARKET_ONLY']
         # Init screen with ui
         self.ui = uiCurses()
         self.ui.print_ui()
@@ -68,7 +70,8 @@ class Runner(object):
                                           api_key=kwargs['AUTH_DATA']['binance']['api_key'],
                                           secret=kwargs['AUTH_DATA']['binance']['secret'],
                                           verbose=False,
-                                          logger=logger)
+                                          logger=logger,
+                                          marketonly=self.market_only)
         self.data_provider_list.append(self.exchange.exchange_name)
         # self.data_provider_list.append([self.exchange.exchange_name, self.exchange])
         # Load index markets
@@ -316,8 +319,8 @@ class Runner(object):
                     if amount < 1e-6:
                         break
                     side = 'BUY'
-                    type = 'LIMIT'
-                    self.quote_collector.append({'symbol': symbol, 'type': type, 'side': side,
+                    order_type = 'LIMIT'
+                    self.quote_collector.append({'symbol': symbol, 'type': order_type, 'side': side,
                                                  'amount': amount, 'price': price})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
@@ -330,8 +333,8 @@ class Runner(object):
                     if amount < 1e-6:
                         break
                     side = 'SELL'
-                    type = 'LIMIT'
-                    self.quote_collector.append({'symbol': symbol, 'type': type, 'side': side,
+                    order_type = 'LIMIT'
+                    self.quote_collector.append({'symbol': symbol, 'type': order_type, 'side': side,
                                                  'amount': amount, 'price': price})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
@@ -368,7 +371,7 @@ class Runner(object):
 
     def _wait_timeout(self):
         """
-        Check if reload timeout passed
+        Check if reload timeout passed, use loop_interval from settings
         Use random generator and random seed equal time
 
         :return : True if timeout passed, False otherwise
@@ -376,7 +379,7 @@ class Runner(object):
         """
         now_time = int(time()-1)
         seed(now_time)
-        if (now_time - self.last_fetch_time > (randrange(40, 60))) or self.run_step == 0:
+        if (now_time - self.last_fetch_time > (randrange(*self.loop_interval))) or self.run_step == 0:
             self.last_fetch_time = now_time
             return True
         else:

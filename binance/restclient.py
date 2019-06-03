@@ -3,27 +3,29 @@
 import ccxt
 import sys
 from time import time_ns
+from random import randint
 
 from yat.calcus import rounded_to_precision
 from payload.orderbook import Orderbook
 
 
-
 class RestClient:
 
     def __init__(self, window: int = 100, api_key: str = None, secret: str = None,
-                 verbose: bool = False, logger: object = None):
+                 verbose: bool = False, logger: object = None, marketonly: bool = False):
         '''
         Exchange initialising
         '''
         self.logger = logger
         self.exchange_name = 'binance'
+        self.marketonly = marketonly
         self._secret = secret
         self._api_key = api_key
         self.exchange = ccxt.binance({"apiKey": self._api_key,
                                       "secret": self._secret,
                                       'verbose': verbose,
-                                      'options': {'adjustForTimeDifference': True}, # ←---- resolves the timestamp
+                                      'options': {'adjustForTimeDifference': True,
+                                                  'defaultTimeInForce': 'GTC', },  # 'GTC', 'IOC'
                                       'enableRateLimit': True})  # type: ccxt.binance
 
         # Initialize the Orderbook with a set of empty dicts and other defaults
@@ -46,13 +48,13 @@ class RestClient:
         self.balances = list()
 
     # region Order
-    def create_order(self, symbol: str, side: str, type: str, amount,
-                     price=None, timeInForce=None, stop_price=None,
-                     iceberg_qty=None, client_order_id=None,):
+
+    def create_order(self, symbol: str, side: str, order_type: str, amount,
+                     price=None, client_order_id=None):
         """ Submit a new order
         :param symbol: the market symbol (ie: BNBBTC)
         :param side: "BUY" or "SELL"
-        :param type: "LIMIT" or "MARKET"
+        :param order_type: "LIMIT" or "MARKET"
         :param amount: the amount to buy/sell
         :param price: the price to buy/sell at, used in LIMIT order type
         :param client_order_id: A unique id for the order. Automatically generated if not sent (optional)
@@ -60,37 +62,50 @@ class RestClient:
         :param stop_price: Used with stop orders (optional)
         :param iceberg_qty: Used with iceberg orders (optional)
         :return: response from an exchange with order data(orderID, etc.)
+        :rtype: dict
         """
+        # self.confirm_trade_collector.append(q)
+        # self.order_history.append(q)
+        # self._lookup[q['symbol']] = q
+        # if client_order_id is None:
+        #     client_order_id = ''.join(["%s" % randint(0, 9) for _ in range(0, 8)])
+        # else:
+        #     client_order_id = client_order_id
+        # self._lookup[client_order_id] = dict(symbol=symbol,
+        #                                      order_type=order_type,
+        #                                      side=side,
+        #                                      amount=amount,
+        #                                      price=price, )
+        # Check market filters before quoting
+        cost = amount * price
+        if self.markets[symbol]['limits']['cost']['min'] > cost:
+            return False
+        if self.marketonly:
+            order_type = 'MARKET'
         try:
             order_c = self.exchange.create_order(symbol=symbol,
-                                                 type=type,
+                                                 type=order_type,
                                                  side=side,
                                                  amount=amount,
                                                  price=price,
-                                                 timeInForce=timeInForce,
-                                                 stopPrice=stop_price,
-                                                 iceberQty=iceberg_qty)
+                                                 params={'test': True, })
             return order_c
         except Exception as e:
-            # print(type(e).__name__, e.args, str(e))
-            print('While creating order next error occur: ', type(e).__name__, "!!!", e.args)
-            print("Exiting")
-            sys.exit()
+            print('While creating order next error occur: ', e)
+            return False
 
     def place_multiple_orders(self, quotes: list):
         """
         Feed with quotes
-        TODO Add quotes to order_history, _lookup and confirm_trade_collector
         :param quotes:
         :return:
         """
-        # TODO Add OrderId as index
         for q in quotes:
-            # self.confirm_trade_collector.append(q)
-            # self.order_history.append(q)
-            # self._lookup[q['symbol']] = q
             response = self.create_order(**q)
-            self.order_history.append(response)
+            if response:
+                self._lookup[response['id']] = response
+                self.order_history.append(response)
+
         return []
 
     def add_order_to_history(self, order):
@@ -138,7 +153,6 @@ class RestClient:
             self.logger.error("Exiting")
             self.balances.clear()
             # sys.exit()
-
 
     # endregion
 
@@ -253,7 +267,6 @@ class RestClient:
             self.all_tickers = None
             # self.logger.error("Exiting")
             # sys.exit()
-
 
     def _fetch_ticker(self, symbol):
         """
