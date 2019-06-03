@@ -1,42 +1,32 @@
-from os.path import join
-import logging
-
-
-########################################################################################################################
-# Connection/Auth
-########################################################################################################################
-
-AUTH_DATA = {
-    'binance': {'window': 100,
-                'api_key': '',
-                'secret': ''},
-    'kucoin': {'api_key': '',
-                'secret': 'cd1a2a1b--42f7-aa67-874aff11f069'}}
-
-INFLUX_DATA = {'host': '',
-               'port': 8086,
-               'username': '',
-               'password': '',
-               'database': ''}
-
-
-########################################################################################################################
-# Index settings
-########################################################################################################################
-
-# Index asset names
-SCINDEX = ['USDT', 'TUSD', 'PAX', 'DAI', 'USDC', 'USDS', ]
-
 ########################################################################################################################
 # Portfolio settings
 ########################################################################################################################
 
+# Specify base asset for portfolio calculation such as for example: 'BTC' or 'USDT'
+PORTFOLIO_BASE_ASSET = 'USDT'
+
 # Specify the assets that you hold. These will be used in portfolio calculations.
 PORTFOLIO = {
-    'BTC': {'min': 10, 'max': 80},
-    'USDT': {'min': 10, 'max': 80}, }
+    'BTC': (0.05, 0.9),
+    'ETH': (0.05, 0.9),
+    'BNB': (0.05, 0.9),
+    'USDT': (0.05, 0.9)}
 
+########################################################################################################################
+# Portfolio optimization settings
+########################################################################################################################
 
+WEIGHT_BOUNDS = (0.1, 0.8)
+
+# Use this settings to define portfolio optimization behaviour
+# Choose only one of next option at the same time
+TARGET_RETURN = 0.05
+
+TARGET_RISK = None
+
+# Rebalancing precision as percent.
+# This parameter can change all behaviour undo all small moving
+REBALANCING_PRECISION = 0.01
 
 ########################################################################################################################
 # Order Size & Spread
@@ -53,10 +43,27 @@ INTERVAL = 0.005
 ########################################################################################################################
 
 # If True, will only send orders that rest in the book.
-# Use to guarantee a maker rebate.
-# However -- orders that would have matched immediately will instead cancel, and you may end up with
-# unexpected delta. Be careful.
-POST_ONLY = False
+# However -- orders that would have matched immediately
+# will always lead to unexpected price and fee, and you
+# may end up with unexpected delta. Be careful.
+MARKET_ONLY = False
+
+########################################################################################################################
+# Connection/Auth
+########################################################################################################################
+
+AUTH_DATA = {
+    'binance': {'window': ,
+                'api_key': '',
+                'secret': ''},
+    'kucoin': {'api_key': '',
+                'secret': ''}}
+
+INFLUX_DATA = {'host': '',
+               'port': ,
+               'username': '',
+               'password': '',
+               'database': ''}
 
 ########################################################################################################################
 # Misc Behavior, Technicals
@@ -66,9 +73,12 @@ POST_ONLY = False
 DRY_RUN = True
 # DRY_RUN = False
 
+BUILD_DATE = '190601'
+
 # How often to re-check and replace orders.
-# Generally, it's safe to make this short because we're fetching from websockets. But if too many
-# order amend/replaces are done, you may hit a ratelimit.
+# Generally, it's safe to make this short if we're fetching
+# from websockets. But if too many order amend/replaces are
+# done, you may hit a ratelimit.
 LOOP_INTERVAL = 5
 
 # Wait times between orders / errors
@@ -76,8 +86,13 @@ API_REST_INTERVAL = 1
 API_ERROR_INTERVAL = 10
 TIMEOUT = 7
 
-# Available levels: logging.(DEBUG|INFO|WARN|ERROR)
-LOG_LEVEL = logging.DEBUG
+# If file changes, reload the bot.
+WATCHED_FILE = '_settings'
 
-# If any of these files (and this file) changes, reload the bot.
-WATCHED_FILES = [join('core', '_settings'), join('payload', 'runner.py'), join('binance', 'restclient.py')]
+########################################################################################################################
+# Index settings
+########################################################################################################################
+
+# Index asset names
+SCINDEX = ['USDT', 'TUSD', 'PAX', 'DAI', 'USDC', 'USDS', ]
+
