@@ -5,6 +5,7 @@ __pycache__
 .idea/
 .vscode/launch.json
 *.pyc
+*.swp
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
