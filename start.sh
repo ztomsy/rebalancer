@@ -8,7 +8,7 @@ tmux start-server
 # create a new tmux session
 tmux new-session -d -s $SESSION_NAME
 # start nano editor with settings
-tmux send-keys "nano _settings.py" C-m
+tmux send-keys "nano settings.py" C-m
 # split window horizontally  on 70 percent of the screen
 # and start our script, -d return focus to previous window
 tmux split-window -dh -p 70 'python run.py; read'

@@ -1,12 +1,12 @@
 import os
 from importlib import reload
-import _settings
+import settings
 
 
 class settingsWatcher(object):
 
     # Constructor
-    def __init__(self, watch_file: str = '_settings.py'):
+    def __init__(self, watch_file: str = 'settings.py'):
         self._cached_stamp = 0
         self.settings = {}
         self.settings = self.build_dict()
@@ -27,7 +27,7 @@ class settingsWatcher(object):
 
     # Call this function each time a change happens
     def reload_watched_file(self):
-        self.importOrReload('_settings')
+        self.importOrReload('settings')
         self.settings.clear()
         self.settings = self.build_dict()
 
@@ -46,5 +46,5 @@ class settingsWatcher(object):
     def build_dict(self):
         """Build and return a dict of settings from imported module
         """
-        return {attr: getattr(_settings, attr) for attr in dir(_settings) if not callable(
-                getattr(_settings, attr)) and not attr.startswith("__")}
+        return {attr: getattr(settings, attr) for attr in dir(settings) if not callable(
+                getattr(settings, attr)) and not attr.startswith("__")}
