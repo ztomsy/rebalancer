@@ -79,7 +79,7 @@ BUILD_DATE = '190601'
 # Generally, it's safe to make this short if we're fetching
 # from websockets. But if too many order amend/replaces are
 # done, you may hit a ratelimit.
-LOOP_INTERVAL = 5
+LOOP_INTERVAL = (40, 60)
 
 # Wait times between orders / errors
 API_REST_INTERVAL = 1
