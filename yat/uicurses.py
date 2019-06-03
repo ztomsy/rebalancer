@@ -45,8 +45,8 @@ class uiCurses:
         mmask = curses.ALL_MOUSE_EVENTS  # for now accept all mouse events
         main = curses.initscr()  # get a window object
         y, x = main.getmaxyx()  # get size
-        if y < 24 or x < 80:  # verify minimum size rqmts
-            raise RuntimeError("Terminal must be at least 80 x 24")
+        if y < 24 or x < 20:  # verify minimum size rqmts
+            raise RuntimeError("Terminal must be at least 20 x 24")
         curses.noecho()  # turn off key echoing
         curses.cbreak()  # turn off key buffering
         curses.mousemask(mmask)  # accept mouse events
@@ -109,12 +109,12 @@ class uiCurses:
         except:
             return False
 
-    def print_table_body(self, data: list):
+    def print_table_body(self, data: list, color_b: float = -0.09):
         for i in range(1, len(data)):
             for j in range(0, len(data[i])):
                 if self.check_string_to_float(data[i][j]):
                     data_ij = float(data[i][j])
-                    if data_ij >= -0.05:
+                    if data_ij >= color_b:
                         self.stdscr.addstr("{:^10s}".format(str(data[i][j])), curses.color_pair(3))
                     else:
                         self.stdscr.addstr("{:^10s}".format(str(data[i][j])), curses.color_pair(2))
