@@ -52,10 +52,13 @@ This rebalancer works on the following principles:
 The following is some of what you can expect when running this program:
 
  
-![screenshot](docs/rebalancer190601build.png "Screenshot of one of the earliest verion")
+![screenshot](docs/rebalancer190601build.png "Screenshot of one of the earliest version")
 
 ## Roadmap
 
+- [ ] All base asset support
+- [ ] All assets portfolio
+- [ ] Database reporting on trades
 - [ ] Separate bounds for each asset.
 - [ ] Multiple accounts on same exchange.
 - [ ] Processing multiple time frame ohlcv data.
