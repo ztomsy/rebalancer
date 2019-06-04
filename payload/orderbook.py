@@ -3,8 +3,6 @@
 import time
 import numpy as np
 
-from payload.obSignal import ObSignal
-
 
 class Orderbook:
 
@@ -17,9 +15,6 @@ class Orderbook:
         _lob are list of order book tuples (run_step, ask_book, bid_book) indexed by add order
         """
         self.logger = logger
-
-        self.Signal = ObSignal()
-
         self._ask_book = list()
         self._bid_book = list()
         # window also affect _tob, _lob lists length
@@ -45,8 +40,8 @@ class Orderbook:
         self._bid_book = order_book['bids']
 
         self._update_tob(run_step, spread_lag_size)
-        self._update_lob(run_step, spread_lag_size)
-        self._update_signal(run_step)
+        # self._update_lob(run_step, spread_lag_size)
+        # self._update_signal(run_step)
 
     def _update_signal(self, run_step: int) -> None:
         """
@@ -56,7 +51,7 @@ class Orderbook:
         """
         if len(self._signal) > self._window:
             del (self._signal[0])
-        self._signal.append(self.Signal.make_signal(self.report_top_of_book(), run_step))
+        # self._signal.append(self.Signal.make_signal(self.report_top_of_book(), run_step))
 
     def _update_lob(self, run_step: int, spread_lag_size: int) -> None:
         # self._lob.append(list(run_step, list(self._ask_book), list(self._bid_book)))
