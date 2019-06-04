@@ -53,14 +53,14 @@ MARKET_ONLY = False
 ########################################################################################################################
 
 AUTH_DATA = {
-    'binance': {'window': ,
+    'binance': {'window': 100,
                 'api_key': '',
                 'secret': ''},
     'kucoin': {'api_key': '',
                 'secret': ''}}
 
 INFLUX_DATA = {'host': '',
-               'port': ,
+               'port': 8086,
                'username': '',
                'password': '',
                'database': ''}
