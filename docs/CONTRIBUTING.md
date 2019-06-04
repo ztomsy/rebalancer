@@ -41,3 +41,10 @@ the methods and their arguments.
 
 Just remember it'd make things a lot simpler to have the person who
 wrote the code explain it in their own words.
+
+Comments with TODO and FIXME are welcome, but try to minimize their amount in 
+pushed version.
+```python
+# TODO Remove this line later
+# FIXME Make things work better
+```
