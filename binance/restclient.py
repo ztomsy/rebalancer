@@ -2,8 +2,8 @@
 # encoding: utf-8
 import ccxt
 import sys
-from time import time_ns
-from random import randint
+from time import time_ns, ctime
+from random import randint, seed
 
 from yat.calcus import rounded_to_precision
 from payload.orderbook import Orderbook
@@ -17,17 +17,18 @@ class RestClient:
         Exchange initialising
         '''
         self.logger = logger
+        self.dry_run = False
         self.exchange_name = 'binance'
         self.marketonly = marketonly
         self._secret = secret
         self._api_key = api_key
-        self.exchange = ccxt.binance({"apiKey": self._api_key,
+        self.exchange: ccxt.binance = ccxt.binance({"apiKey": self._api_key,
                                       "secret": self._secret,
                                       'verbose': verbose,
                                       'options': {'adjustForTimeDifference': True,
                                                   'defaultTimeInForce': 'GTC', },  # 'GTC', 'IOC'
-                                      'enableRateLimit': True})  # type: ccxt.binance
-
+                                      'enableRateLimit': True})
+        self.exchange_name = self.exchange.describe()['id']
         # Initialize the Orderbook with a set of empty dicts and other defaults
         self.orderbook = Orderbook(window, logger)
         # Load markets on initialization
@@ -36,23 +37,39 @@ class RestClient:
         self.markets = {x: y for x, y in self.markets.items() if y['active']}
         self.all_tickers: dict = None
         # Order and trade sets
-        self.confirm_trade_collector = []
+        self.confirm_trade_collector = list()
         self._order_index = 0
-        self.order_history = []
         self._ex_index = 0
-        self._lookup = {}
-
+        self.order_history = dict()
         self._candlesticks = dict()
         self._trades = dict()
-
         self.balances = list()
 
     # region Order
 
+    def place_multiple_orders(self, quotes: list):
+        """
+        Feed with quotes
+        :param quotes:
+        :return:
+        """
+        if not isinstance(quotes, list):
+            return False
+        if len(quotes) < 1:
+            return False
+        for q in quotes:
+            response = self.create_order(**q)
+            if isinstance(response, dict):
+                if 'id' in response:
+                    self.order_history[response['id']] = response
+                else:
+                    self.order_history[response['client_order_id']] = response
+                    self.order_history[response['client_order_id']]['id'] = response['client_order_id']
+
     def create_order(self, symbol: str, side: str, order_type: str, amount,
                      price=None, client_order_id=None):
         """ Submit a new order
-        :param symbol: the market symbol (ie: BNBBTC)
+        :param symbol: the market symbol (ie: BTC/USDT)
         :param side: "BUY" or "SELL"
         :param order_type: "LIMIT" or "MARKET"
         :param amount: the amount to buy/sell
@@ -61,69 +78,83 @@ class RestClient:
         :param timeInForce: 'GTC' = Good Till Cancel(default), 'IOC' = Immediate Or Cancel
         :param stop_price: Used with stop orders (optional)
         :param iceberg_qty: Used with iceberg orders (optional)
-        :return: response from an exchange with order data(orderID, etc.)
+        :return: response from an exchange with order data {'id': '416850076', 'timestamp': 1559577269494,
+        'datetime': '2019-06-03T15:54:29.494Z', 'lastTradeTimestamp': None, 'symbol': 'BTC/USDT','type': 'limit',
+        'side': 'sell', 'price': 100.0, 'amount': 0.001, 'cost': 0.0, 'average': None, 'filled': 0.0, 'remaining':
+        0.001, 'status': 'open', 'fee': None, 'trades': None}
         :rtype: dict
         """
-        # self.confirm_trade_collector.append(q)
-        # self.order_history.append(q)
-        # self._lookup[q['symbol']] = q
-        # if client_order_id is None:
-        #     client_order_id = ''.join(["%s" % randint(0, 9) for _ in range(0, 8)])
-        # else:
-        #     client_order_id = client_order_id
-        # self._lookup[client_order_id] = dict(symbol=symbol,
-        #                                      order_type=order_type,
-        #                                      side=side,
-        #                                      amount=amount,
-        #                                      price=price, )
+        # Create random number
+        if client_order_id is None:
+            seed(time_ns())
+            client_order_id = '654'.join(["%s" % randint(0, 9) for _ in range(0, 8)])
+        else:
+            client_order_id = client_order_id
         # Check market filters before quoting
-        cost = amount * price
-        if self.markets[symbol]['limits']['cost']['min'] > cost:
-            return False
+        if amount and price:
+            cost = float(amount) * float(price)
+            if self.markets[symbol]['limits']['cost']['min'] > cost:
+                # TODO return order_dict instead
+                return False
         if self.marketonly:
             order_type = 'MARKET'
+        # Build order dict, use test extra param for testing
+        if self.dry_run:
+            order_dict = dict(symbol=symbol, type=order_type,
+                              side=side, amount=amount, price=price,
+                              params=dict(test=True))
+        else:
+            order_dict = dict(symbol=symbol, type=order_type,
+                              side=side, amount=amount, price=price)
         try:
-            order_c = self.exchange.create_order(symbol=symbol,
-                                                 type=order_type,
-                                                 side=side,
-                                                 amount=amount,
-                                                 price=price,
-                                                 params={'test': True, })
+            order_c = self.exchange.create_order(**order_dict)
+            order_c['client_order_id'] = client_order_id
             return order_c
         except Exception as e:
-            print('While creating order next error occur: ', e)
-            return False
+            order_dict['status'] = type(e).__name__
+            order_dict['timestamp'] = time_ns()
+            order_dict['client_order_id'] = client_order_id
+            return order_dict
 
-    def place_multiple_orders(self, quotes: list):
+    def cancel_order(self, orderId=None, symbol=None):
         """
-        Feed with quotes
-        :param quotes:
+        Cancel order by symbol and order id
+        :param orderId:
+        :param symbol:
         :return:
         """
-        for q in quotes:
-            response = self.create_order(**q)
-            if response:
-                self._lookup[response['id']] = response
-                self.order_history.append(response)
-
-        return []
-
-    def add_order_to_history(self, order):
-        '''Add an order (dict) to order_history'''
-        self._order_index += 1
-        self.order_history.append(
-            {'exid': self._order_index, 'order_id': order['order_id'], 'timestamp': order['timestamp'],
-             'type': order['type'], 'quantity': order['quantity'],
-             'side': order['side'], 'price': order['price']})
-
-    def _add_order_to_lookup(self, trader_id, order_id, ex_id):
-        '''
-        Add lookup for ex_id
-        '''
-        if trader_id in self._lookup.keys():
-            self._lookup[trader_id][order_id] = ex_id
+        if symbol and orderId is not None:
+            order_dict = dict(orderId=orderId, symbol=symbol, params={})
+            try:
+                response = self.exchange.cancel_order(**order_dict)
+                return response
+            except Exception as e:
+                order_dict['status'] = type(e).__name__
+                order_dict['timestamp'] = time_ns()
+                return order_dict
         else:
-            self._lookup[trader_id] = {order_id: ex_id}
+            return False
+
+    def fetch_processed_orders(self):
+        if len(self.order_history) == 0:
+            return False
+        for x, y in self.order_history.items():
+            try:
+                resp = self.exchange.fetch_order(y['id'], y['symbol'])
+                self.order_history[x] = resp
+            except Exception as e:
+                self.order_history[x]['status'] = type(e).__name__
+
+    def cancel_processed_orders(self):
+        if len(self.order_history) == 0:
+            return False
+        for x, y in self.order_history.items():
+            if y['status'] == 'open':
+                try:
+                    resp = self.exchange.fetch_order(y['id'], y['symbol'])
+                    self.order_history[x] = resp
+                except Exception as e:
+                    self.order_history[x]['status'] = type(e).__name__
 
     # endregion
 
@@ -145,7 +176,6 @@ class RestClient:
         """
         try:
             result = self.exchange.fetch_balance()
-            # self.balances = result
             self.balances = self._filter_not_null(result)
         except Exception as e:
             # print(type(e).__name__, e.args, str(e))
@@ -281,6 +311,5 @@ class RestClient:
             self.logger.error("While fetching ohlcv next error occur: {}\n{}\n".format(type(e).__name__, e.args))
             self.logger.error("Exiting")
             sys.exit()
-
 
     # endregion
