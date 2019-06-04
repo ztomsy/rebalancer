@@ -41,20 +41,18 @@ class Runner(object):
         self.ui.header_str = "Portfolio ReBalancer build:{}".format(kwargs['BUILD_DATE'])
         # Init database connection
         self.influx = Influx(kwargs['INFLUX_DATA'])
-        # Init index values
-        self.scindex = kwargs['SCINDEX']
-        self.scindex_markets = None
-        self.scindex_tickers = None
         # Init portfolio
-        self.portfolio_ohlcv = {}
-        self.rebalancing_precision = kwargs['REBALANCING_PRECISION']
         self.portfolio = kwargs['PORTFOLIO']
+        # Init index values
+        self.scindex = [_ for _ in self.portfolio.keys()]
+        self.rebalancing_precision = kwargs['REBALANCING_PRECISION']
         self.portfolio_base_asset = kwargs['PORTFOLIO_BASE_ASSET']
         self.portfolio_base_amount: float = 0
         self.portfolio_assets = [x for x in self.portfolio.keys()]
         self.portfolio_weight_bounds = kwargs['WEIGHT_BOUNDS']
         self.portfolio_target_return = kwargs['TARGET_RETURN']
         self.portfolio_target_risk = kwargs['TARGET_RISK']
+        self.portfolio_ohlcv = {}
         self.portfolio_current_weights = {}
         self.portfolio_recommended_weights = {}
         self.portfolio_difference = {}
@@ -75,18 +73,11 @@ class Runner(object):
         self.data_provider_list.append(self.exchange.exchange_name)
         # self.data_provider_list.append([self.exchange.exchange_name, self.exchange])
         # Load index markets
-        self.scindex_markets = [x for x, y in self.exchange.markets.items() if (y['base'] in self.scindex and y[
-            'quote'] == 'BTC') or (y['quote'] in self.scindex and y['base'] == 'BTC')]
+        # self.scindex_markets = [x for x, y in self.exchange.markets.items() if (y['base'] in self.scindex and y[
+        #     'quote'] == 'BTC') or (y['quote'] in self.scindex and y['base'] == 'BTC')]
         # Get all tickers
         self.exchange.process_tickers()
-        # Sort only open markets
-        self.scindex_tickers = {x for x in self.scindex_markets if self.exchange.all_tickers[x]['askVolume'] > 0 and
-                                self.exchange.all_tickers[x]['askVolume'] > 0}
-        # After filtering tickers, combine new index markets
-        self.scindex_markets = [x for x in self.scindex_markets if x in
-                                self.scindex_tickers]
-        self.exchange.calc_tickers(self.scindex_markets)
-        # Get portfolio markets
+
         self.portfolio_base_markets = [x for x, y in self.exchange.markets.items() if (y['base'] in self.portfolio_assets
                                                                                        and y['quote'] ==
                                                                                        self.portfolio_base_asset) or (y['quote'] in self.portfolio_assets
@@ -111,7 +102,7 @@ class Runner(object):
     def _update_index_data(self):
         self.ui.index_data.clear()
         self.ui.index_data = [['NAME', 'PROVIDER', 'TOB ASK', 'TOB BID', 'MID', 'SPREAD', 'SPREAD%'], ]
-        for s in self.scindex_markets:
+        for s in self.portfolio_base_markets:
             ticker = self.exchange.all_tickers[s]
             self.ui.index_data.append([s, self.exchange.exchange_name,
                                        "{:.2f}".format(ticker['ask']),
@@ -313,28 +304,29 @@ class Runner(object):
                 if "{}/{}".format(a, c) in pcmall_s:
                     symbol = "{}/{}".format(a, c)
                     base_amount = min(abs(b['base_amount']), abs(d['base_amount']))
-                    price = t[symbol]['ask']
+                    # TODO Implement crossing spread behaviour
+                    price = t[symbol]['bid']
                     amount = rounded_to_precision(self._count_symbol_amount(a, base_amount), 8)
                     # Avoid small amount quotes
                     if amount < 1e-6:
                         break
                     side = 'BUY'
                     order_type = 'LIMIT'
-                    self.quote_collector.append({'symbol': symbol, 'type': order_type, 'side': side,
+                    self.quote_collector.append({'symbol': symbol, 'order_type': order_type, 'side': side,
                                                  'amount': amount, 'price': price})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
                 elif "{}/{}".format(c, a) in pcmall_s:
                     symbol = "{}/{}".format(c, a)
                     base_amount = min(abs(b['base_amount']), abs(d['base_amount']))
-                    price = t[symbol]['bid']
+                    price = t[symbol]['ask']
                     amount = rounded_to_precision(self._count_symbol_amount(c, base_amount), 8)
                     # Avoid small amount quotes
                     if amount < 1e-6:
                         break
                     side = 'SELL'
                     order_type = 'LIMIT'
-                    self.quote_collector.append({'symbol': symbol, 'type': order_type, 'side': side,
+                    self.quote_collector.append({'symbol': symbol, 'order_type': order_type, 'side': side,
                                                  'amount': amount, 'price': price})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
@@ -349,24 +341,31 @@ class Runner(object):
     def _proceed_orders(self):
         """
         Print quotes from quote_collector.
-        On dry run clear quote_collector list, otherwise place multiple orders
-        with provided RestClient methods
-        :return:
+        Check for dry_run option and place all orders from quote collector.
+        Clear quote_collector and print order_history from an exchange class
         """
         if isinstance(self.quote_collector, list):
             if len(self.quote_collector) > 0:
-                quotes_info = ["{} {} {}@{}".format(x['side'], x['symbol'],
-                                                    x['amount'], x['price']) for x in self.quote_collector]
-                self.ui.reload_ui(screen_data=quotes_info)# self.ui.screen_data.extend(quotes_info))
-                if self.dry_run:
-                    self.quote_collector.clear()
-                else:
-                    # Place real orders with order manager
-                    # on True clear quote_collector
-                    if self.exchange.place_multiple_orders(self.quote_collector):
-                        self.quote_collector.clear()
+                quotes_info = ["{} {} {}@{} placing...".format(x['side'], x['symbol'],
+                                                               x['amount'], x['price']) for x
+                               in self.quote_collector]
+                self.ui.reload_ui(screen_data=quotes_info)
+                # Define testing behaviour
+                self.exchange.dry_run = self.dry_run
+                # Place orders from quote_collector
+                self.exchange.place_multiple_orders(self.quote_collector)
+                # Clear quote_collector
+                self.quote_collector.clear()
+                # Parse exchange order history
+                quotes_history_info = list()
+                for x, y in self.exchange.order_history.items():
+                    if y['status'] is not None:
+                        quotes_history_info.append("{} {} {}@{} {} {} {}".format(
+                                y['side'], y['symbol'], y['amount'], y['price'],
+                                y['status'], y['client_order_id'], y['id']))
+                self.ui.reload_ui(screen_data=quotes_history_info)
         else:
-            self.logger.info("Quote collector is empty")
+            self.ui.reload_ui(screen_data='Missing quote_collector')
     # endregion
 
     def _wait_timeout(self):
@@ -391,13 +390,17 @@ class Runner(object):
             sleep(1)
             for t in self.data_provider_list:
                 if t == 'binance' and self._wait_timeout():
-                    self.ui.reload_ui(statusbar_str="Load tickers")
+                    # Cancel non filled orders if exist
+                    self.ui.reload_ui(statusbar_str="Fetching orders")
+                    self.exchange.fetch_processed_orders()
+                    self.ui.reload_ui(statusbar_str="Canceling orders")
+                    self.exchange.cancel_processed_orders()
+                    quotes_info = [x for x in self.quote_collector]
+                    self.ui.reload_ui(statusbar_str="Load tickers", screen_data=quotes_info)
                     # Perform checking connections and previous lag
                     # self.exchange.sanity_check()
                     # Load and preprocess last tickers price
                     self.exchange.process_tickers()
-                    # Add index data to list
-                    self._update_index_data()
                     # Fill ohlcv data
                     self.ui.reload_ui(statusbar_str="Load ohlcv")
                     self.portfolio_ohlcv.clear()
@@ -410,6 +413,7 @@ class Runner(object):
                     self._count_portfolio_base_amount()
                     self._update_portfolio_current_weights()
                     # Add data to lists for ui
+                    self._update_index_data()
                     self._update_pctchange_data()
                     self._update_portfolio_data()
                     # Calculate optimize portfolio
@@ -430,14 +434,14 @@ class Runner(object):
                     self._update_portfolio_data()
                     # Add settings and portfolio recommendations data screen
                     self.ui.reload_ui(portfolio_opt_data=p_list)
-                    # Generate quotes
+                    # Generate quotes and fill quote_collector
                     self.ui.reload_ui(statusbar_str="Generate quotes")
                     self._generate_quotes()
+                    quotes_info = ["{} {} {}@{}".format(x['side'], x['symbol'],
+                                                        x['amount'], x['price']) for x in self.quote_collector]
+                    self.ui.reload_ui(screen_data=quotes_info)
 
                 if t == 'kucoin':
-                    pass
-
-                if t == 'twim':
                     pass
 
             # # Check if quote_collector not empty
