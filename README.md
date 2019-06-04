@@ -28,7 +28,8 @@ It is free to use and modify for your own strategies and api wrappers.
 
 1. Pull repository from git
 2. python -m pip install requirements
-3. Modify settings
+3. cp _setings.py settings.py
+4. Modify your settings
 4. Run it in various ways:
     * Simple run it with python run.py 
     * Use start.sh script to automatically run new tmux session with script
@@ -45,6 +46,7 @@ This rebalancer works on the following principles:
 * Converge recommended weights with current portfolio weights.
 * Generate a descriptions of orders we would like to place.
 * Trade it with right account and provider.
+* Cancel unfilled orders.
 * Check settings file and reload on changes.
     
 ## Simplified Output
