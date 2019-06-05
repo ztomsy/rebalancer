@@ -17,7 +17,6 @@ class PortfolioOpt:
         self.last_call = self.start
         self.cutoff_date = datetime.datetime.now()
         self.weight_bound: float = 0
-        self.return_months: int = 0
 
     # region Helpers
     def elapsed_time(self):
@@ -80,28 +79,22 @@ class PortfolioOpt:
 
     def build_pricing_data_from_ohlcv(self, portfolio_ohlcv: dict, base_asset: str):
         """
-        >>> pricing_data =  {'BTC/USDT': [[1258317600000, 7965.08, 7966.78, 7830.0, 7889.32, 1755.837013],[1258321200000, 7889.33, 8067.3, 7885.85, 8030.04, 2082.664391]],'ETH/USDT': [[1258317600000, 250.07, 250.08, 246.0, 247.57, 26873.12446],[1258321200000, 247.6, 254.65, 247.27, 254.05, 27160.78046]]}
-        >>> po = PortfolioOpt()
-        >>> po.build_pricing_data_from_ohlcv(pricing_data, 'USDT').info()
-        <class 'pandas.core.frame.DataFrame'>
-        Index: 2 entries, Sun Nov 15 23:40:00 2009 to Mon Nov 16 00:40:00 2009
-        Data columns (total 3 columns):
-        (BTC,)     2 non-null float64
-        (ETH,)     2 non-null float64
-        (USDT,)    2 non-null int64
-        dtypes: float64(2), int64(1)
-        memory usage: 64.0+ bytes
+        Build new pricing dict from portfolio_ohlcv 'close' column
+        Add '1' price column for base asset.
 
-        :param portfolio_ohlcv:
-        :return:
+        :param portfolio_ohlcv: pricing data
+        :type portfolio_ohlcv: dict
+        :return: Formated pricing data dict
+        :rtype: dict
         """
         # Convert names
-        # FIXME Check for assets_list and markets proper name
         assets_list = []
         for m in portfolio_ohlcv.keys():
-            asset = m[0:m.index('/')]
-            assets_list.append(asset)
-
+            asset1, asset2 = m.split('/')  # m[0:m.index('/')]
+            if asset1 != base_asset:
+                assets_list.append(asset1)
+            else:
+                assets_list.append(asset2)
         # assets_list = [x for x in portfolio_ohlcv.keys()]
         data_c = pd.DataFrame()
         for i, j in portfolio_ohlcv.items():
@@ -172,4 +165,5 @@ class PortfolioOpt:
 
     def make_weight_bounds(self, weight_bounds):
         # TODO Add separate bounds for each asset <class 'tuple'>: ((0, 0.6), (0.2, 1), (0, 0.1))
+
         pass
