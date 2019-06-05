@@ -358,12 +358,12 @@ class Runner(object):
                 self.quote_collector.clear()
                 # Parse exchange order history
                 quotes_history_info = list()
-                for x, y in self.exchange.order_history.items():
-                    if y['status'] is not None:
-                        quotes_history_info.append("{} {} {}@{} {} {} {}".format(
-                                y['side'], y['symbol'], y['amount'], y['price'],
-                                y['status'], y['client_order_id'], y['id']))
-                self.ui.reload_ui(screen_data=quotes_history_info)
+                for y in self.exchange.order_history.values():
+                    qhi = ''.join(["{} ".format(v) for v in y.values() if
+                                   not isinstance(v, dict)])
+                    quotes_history_info.append(qhi)
+                # Filter last 5 orders
+                self.ui.reload_ui(screen_data=quotes_history_info[:5])
         else:
             self.ui.reload_ui(screen_data='Missing quote_collector')
     # endregion
@@ -390,11 +390,12 @@ class Runner(object):
             sleep(1)
             for t in self.data_provider_list:
                 if t == 'binance' and self._wait_timeout():
-                    # Cancel non filled orders if exist
+                    # Cancel non filled orders if exist and clear order history finally
                     self.ui.reload_ui(statusbar_str="Fetching orders")
                     self.exchange.fetch_processed_orders()
                     self.ui.reload_ui(statusbar_str="Canceling orders")
                     self.exchange.cancel_processed_orders()
+                    self.exchange.order_history.clear()
                     quotes_info = [x for x in self.quote_collector]
                     self.ui.reload_ui(statusbar_str="Load tickers", screen_data=quotes_info)
                     # Perform checking connections and previous lag
