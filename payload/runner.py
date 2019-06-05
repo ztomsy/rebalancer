@@ -105,10 +105,10 @@ class Runner(object):
         for s in self.portfolio_base_markets:
             ticker = self.exchange.all_tickers[s]
             self.ui.index_data.append([s, self.exchange.exchange_name,
-                                       "{:.2f}".format(ticker['ask']),
-                                       "{:.2f}".format(ticker['bid']),
-                                       "{:.2f}".format(ticker['mid_price']),
-                                       "{:.2f}".format(ticker['spread']),
+                                       "{:.4f}".format(ticker['ask']),
+                                       "{:.4f}".format(ticker['bid']),
+                                       "{:.4f}".format(ticker['mid_price']),
+                                       "{:.4f}".format(ticker['spread']),
                                        "{:.4f}".format(ticker['spread_p'])])
     # endregion
 
@@ -127,12 +127,25 @@ class Runner(object):
     def _count_symbol_amount(self, symbol_base, amount):
         """
         Count amount of symbol_base currency from portfolio_base_asset amount
+
+        :param symbol_base: asset name
+        :type symbol_base: str
+        :param amount: base asset amount
+        :type amount: float
         :return: amount quoted in symbol_base asset
         :rtype: float
         """
         amount = amount
-        ra = amount / self.exchange.all_tickers["{}/{}".format(symbol_base, self.portfolio_base_asset)]['ask']
-        return ra
+        if symbol_base == self.portfolio_base_asset:
+            return amount
+        try:
+            ask_price = self.exchange.all_tickers["{}/{}".format(
+                    symbol_base, self.portfolio_base_asset)]['ask']
+            return amount / ask_price
+        except KeyError:
+            ask_price = self.exchange.all_tickers["{}/{}".format(
+                    self.portfolio_base_asset, symbol_base)]['ask']
+            return amount * ask_price
 
     def _count_base_balance(self, asset: str) -> float:
         """
