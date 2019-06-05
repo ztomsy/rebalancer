@@ -49,9 +49,11 @@ class RestClient:
 
     def place_multiple_orders(self, quotes: list):
         """
-        Feed with quotes
-        :param quotes:
-        :return:
+        Place multiple quotes and update order_history
+        with response indexing by id or client_order_id
+
+        :param quotes: Feed with quotes
+        :type quotes: list
         """
         if not isinstance(quotes, list):
             return False
@@ -61,14 +63,17 @@ class RestClient:
             response = self.create_order(**q)
             if isinstance(response, dict):
                 if 'id' in response:
-                    self.order_history[response['id']] = response
+                    if response['id'] is not None:
+                        self.order_history[response['id']] = response
+                    elif response['id'] is None:
+                        self.order_history[response['client_order_id']] = response
                 else:
                     self.order_history[response['client_order_id']] = response
-                    self.order_history[response['client_order_id']]['id'] = response['client_order_id']
 
     def create_order(self, symbol: str, side: str, order_type: str, amount,
                      price=None, client_order_id=None):
         """ Submit a new order
+
         :param symbol: the market symbol (ie: BTC/USDT)
         :param side: "BUY" or "SELL"
         :param order_type: "LIMIT" or "MARKET"
@@ -78,34 +83,35 @@ class RestClient:
         :param timeInForce: 'GTC' = Good Till Cancel(default), 'IOC' = Immediate Or Cancel
         :param stop_price: Used with stop orders (optional)
         :param iceberg_qty: Used with iceberg orders (optional)
-        :return: response from an exchange with order data {'id': '416850076', 'timestamp': 1559577269494,
-        'datetime': '2019-06-03T15:54:29.494Z', 'lastTradeTimestamp': None, 'symbol': 'BTC/USDT','type': 'limit',
-        'side': 'sell', 'price': 100.0, 'amount': 0.001, 'cost': 0.0, 'average': None, 'filled': 0.0, 'remaining':
-        0.001, 'status': 'open', 'fee': None, 'trades': None}
+        :return: response from an exchange with order data or order_dict which status are exception name
         :rtype: dict
         """
         # Create random number
         if client_order_id is None:
             seed(time_ns())
-            client_order_id = '654'.join(["%s" % randint(0, 9) for _ in range(0, 8)])
+            client_order_id = ''.join(["%s" % randint(0, 9) for _ in range(0, 9)])
         else:
             client_order_id = client_order_id
+        if self.marketonly:
+            order_type = 'MARKET'
+        # Build order dict
+        order_dict = dict(symbol=symbol, type=order_type,
+                          side=side, amount=amount, price=price)
+        #On dry run return order_dict
+        if self.dry_run:
+            order_dict['status'] = 'DRY_RUN'
+            order_dict['timestamp'] = time_ns()
+            order_dict['client_order_id'] = client_order_id
+            return order_dict
         # Check market filters before quoting
+        # TODO Check all limits
         if amount and price:
             cost = float(amount) * float(price)
             if self.markets[symbol]['limits']['cost']['min'] > cost:
-                # TODO return order_dict instead
-                return False
-        if self.marketonly:
-            order_type = 'MARKET'
-        # Build order dict, use test extra param for testing
-        if self.dry_run:
-            order_dict = dict(symbol=symbol, type=order_type,
-                              side=side, amount=amount, price=price,
-                              params=dict(test=True))
-        else:
-            order_dict = dict(symbol=symbol, type=order_type,
-                              side=side, amount=amount, price=price)
+                order_dict['status'] = 'below_min_cost_limit'
+                order_dict['timestamp'] = time_ns()
+                order_dict['client_order_id'] = client_order_id
+                return order_dict
         try:
             order_c = self.exchange.create_order(**order_dict)
             order_c['client_order_id'] = client_order_id
@@ -136,6 +142,10 @@ class RestClient:
             return False
 
     def fetch_processed_orders(self):
+        """
+        Update status or orders in order_history,
+        on exception feed status with exception name
+        """
         if len(self.order_history) == 0:
             return False
         for x, y in self.order_history.items():
@@ -146,6 +156,9 @@ class RestClient:
                 self.order_history[x]['status'] = type(e).__name__
 
     def cancel_processed_orders(self):
+        """
+        Cancel all orders from order_history which status are 'open'
+        """
         if len(self.order_history) == 0:
             return False
         for x, y in self.order_history.items():
