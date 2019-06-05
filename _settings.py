@@ -7,16 +7,21 @@ PORTFOLIO_BASE_ASSET = 'USDT'
 
 # Specify the assets that you hold. These will be used in portfolio calculations.
 PORTFOLIO = {
-    'BTC': (0.05, 0.9),
-    'ETH': (0.05, 0.9),
-    'BNB': (0.05, 0.9),
-    'USDT': (0.05, 0.9)}
+    'BTC': (0, 1),
+    'ETH': (0, 1),
+    'BNB': (0, 1),
+    'USDT': (0, 1),
+    'TUSD': (0, 1),
+    'PAX': (0, 1),
+    'USDC': (0, 1),
+    'XRP': (0, 1),
+    'USDS': (0, 1), }
 
 ########################################################################################################################
 # Portfolio optimization settings
 ########################################################################################################################
 
-WEIGHT_BOUNDS = (0.1, 0.8)
+WEIGHT_BOUNDS = (0, 0.8)
 
 # Use this settings to define portfolio optimization behaviour
 # Choose only one of next option at the same time
@@ -73,7 +78,7 @@ INFLUX_DATA = {'host': '',
 DRY_RUN = True
 # DRY_RUN = False
 
-BUILD_DATE = '190601'
+BUILD_DATE = '190605'
 
 # How often to re-check and replace orders.
 # Generally, it's safe to make this short if we're fetching
@@ -88,11 +93,4 @@ TIMEOUT = 7
 
 # If file changes, reload the bot.
 WATCHED_FILE = '_settings'
-
-########################################################################################################################
-# Index settings
-########################################################################################################################
-
-# Index asset names
-SCINDEX = ['USDT', 'TUSD', 'PAX', 'DAI', 'USDC', 'USDS', ]
 
