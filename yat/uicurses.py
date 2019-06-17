@@ -32,8 +32,7 @@ class uiCurses:
                                ['-', '-', 0, 0, 0, 0, 0], ]
         self.portfolio_opt_data = [' ', ]
         self.screen_data = [' ', ]
-        self.spark_data = {'XXX/YYY': [randint(100, 140) for _ in range(10)],
-                           'YYY/ZZZ': [randint(90, 130) for _ in range(10)]}
+        self.spark_data = {'': [randint(100, 140) for _ in range(10)], }
         self.block_vertical = [chr(x) for x in range(0x2581, 0x2589)]  # fill with ascii symbols
         self.block_horizontal = [chr(x) for x in range(0x258F, 0x2587, -1)]
         # Init curses screen
