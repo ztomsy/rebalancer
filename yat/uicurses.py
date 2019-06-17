@@ -1,17 +1,23 @@
 """
-Ugly curses interface, support header, statusbar and
-simple table drawing with colouring and table header.
+Ugly curses interface which support:
+ - Header bar
+ - Footer bar
+ - Simple table printing with colouring
+ - Table header printing
+ - Spark lines with built-in normalization of data
 
 Check print_ui for current ui implementation
 """
 
 import curses
 from time import strftime, localtime
+from random import randint
 from yat.shared import Side, OType, TIFType
 
 
 class uiCurses:
 
+    # region Init and setup
     def __init__(self):
         # Load curses
         self.key_pressed = 0
@@ -26,19 +32,26 @@ class uiCurses:
                                ['-', '-', 0, 0, 0, 0, 0], ]
         self.portfolio_opt_data = [' ', ]
         self.screen_data = [' ', ]
+        self.spark_data = {'XXX/YYY': [randint(100, 140) for _ in range(10)],
+                           'YYY/ZZZ': [randint(90, 130) for _ in range(10)]}
+        self.block_vertical = [chr(x) for x in range(0x2581, 0x2589)]  # fill with ascii symbols
+        self.block_horizontal = [chr(x) for x in range(0x258F, 0x2587, -1)]
         # Init curses screen
         try:
             self.stdscr = self.setup()
         except Exception as e:
             if str(e) == "setupterm: could not find terminal":
                 self.stdscr = None
+                self.teardown()
             else:
-                print("Unexpected behaviour of STDOUT", str(e))
                 self.stdscr = None
+                self.teardown()
+                print("Unexpected behaviour of STDOUT", str(e))
 
     def setup(self):
         """
          Sets environment up and creates main window
+
          :returns: the main window object
         """
         # setup the console
@@ -50,7 +63,7 @@ class uiCurses:
         curses.noecho()  # turn off key echoing
         curses.cbreak()  # turn off key buffering
         curses.mousemask(mmask)  # accept mouse events
-        self.initcolors()  # turn on and set color pallet
+        self.init_colors()  # turn on and set color pallet
         main.keypad(1)  # let curses handle multibyte special keys
         main.scrollok(1)
         curses.curs_set(0)  # hide the cursor
@@ -59,16 +72,16 @@ class uiCurses:
 
     def teardown(self):
         """
-         Returns console to normal state
+        Returns console to normal state
         """
         # tear down the console
-        curses.nocbreak()
         if self.stdscr:
             self.stdscr.keypad(0)
-        curses.echo()
-        curses.endwin()
+            curses.nocbreak()
+            curses.echo()
+            curses.endwin()
 
-    def initcolors(self):
+    def init_colors(self):
         """
         Initialize color pallet
         """
@@ -79,23 +92,10 @@ class uiCurses:
         curses.init_pair(2, curses.COLOR_RED, curses.COLOR_BLACK)
         curses.init_pair(3, curses.COLOR_GREEN, curses.COLOR_BLACK)
         curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_WHITE)
+        curses.init_pair(5, curses.COLOR_WHITE, curses.COLOR_BLACK)
+    # endregion
 
-    def reload_ui(self, **kwargs):
-        self.push_data(**kwargs)
-        self.print_ui()
-
-    def push_data(self, statusbar_str: str = None, header_str: str = None,
-                  index_data: list = None, portfolio_data: list = None,
-                  pctchange_data: list = None, portfolio_opt_data: list = None,
-                  screen_data: list = None):
-        if header_str is not None: self.header_str = header_str
-        if statusbar_str is not None: self.statusbar_str = statusbar_str
-        if index_data is not None: self.index_data = index_data
-        if portfolio_data is not None: self.portfolio_data = portfolio_data
-        if pctchange_data is not None: self.pctchange_data = pctchange_data
-        if portfolio_opt_data is not None: self.portfolio_opt_data = portfolio_opt_data
-        if screen_data is not None: self.screen_data = screen_data
-
+    # region Curses screen printing
     def print_table_header(self, data):
         for i in range(0, len(data[0])):
             self.stdscr.addstr('{:^10s}'.format(str(data[0][i])), curses.color_pair(1))
@@ -127,10 +127,67 @@ class uiCurses:
             self.stdscr.addstr(str(s))
             self.stdscr.addstr("\n")
 
+    @staticmethod
+    def normalize_spark_data(d: list):
+        """
+        Normalize data to exact bound (0, 7)
+
+        :param d: List to normailize
+        :type d: list
+        :return: normalized list
+        :rtype: list
+        """
+        mean = (max(d) + min(d)) / 2
+        d = [round((100 * (float(i) - mean) / mean), 2) for i in d]
+        d = [round(x + abs(min(d)) + 1, 2) for x in d]
+        d = [round(7 * x / max(d)) for x in d]
+        return d
+
+    def print_spark_lines(self, spark_data: dict):
+        # Create mask to define if data is out of available container length
+        nsd = {x: [0 if i in range(len(self.block_vertical)) else
+                   1 for i in spark_data[x]] for x in spark_data.keys()}
+        # Filter non null lists and normalize necessary spark_data
+        nsd2 = {name: self.normalize_spark_data(spark_data[name]) if sum(spark_mask) != 0 else spark_data[name] for
+                name, spark_mask in nsd.items()}
+        # Iterate throw dict and print each item on new line
+        for name, spark_data in nsd2.items():
+            self.stdscr.addstr(f'{name:^10s}', curses.color_pair(3))
+            for i, s in enumerate(spark_data):
+                if i == 0:
+                    self.stdscr.addstr(self.block_vertical[s], curses.color_pair(5))
+                else:
+                    if spark_data[i] > spark_data[i - 1]:
+                        self.stdscr.addstr(self.block_vertical[s], curses.color_pair(3))
+                    elif spark_data[i] == spark_data[i - 1]:
+                        self.stdscr.addstr(self.block_vertical[s], curses.color_pair(5))
+                    else:
+                        self.stdscr.addstr(self.block_vertical[s], curses.color_pair(2))
+            self.stdscr.addstr('\n')
+    # endregion
+
+    # region Update and Compose
+    def push_data(self, statusbar_str: str = None, header_str: str = None,
+                  index_data: list = None, portfolio_data: list = None,
+                  pctchange_data: list = None, portfolio_opt_data: list = None,
+                  screen_data: list = None):
+        if header_str is not None: self.header_str = header_str
+        if statusbar_str is not None: self.statusbar_str = statusbar_str
+        if index_data is not None: self.index_data = index_data
+        if portfolio_data is not None: self.portfolio_data = portfolio_data
+        if pctchange_data is not None: self.pctchange_data = pctchange_data
+        if portfolio_opt_data is not None: self.portfolio_opt_data = portfolio_opt_data
+        if screen_data is not None: self.screen_data = screen_data
+
+    def reload_ui(self, **kwargs):
+        self.push_data(**kwargs)
+        self.print_ui()
+
     def print_ui(self):
         try:
             # region Preparing
-            self.stdscr.clear()  # erase everything
+            # Clear the screen
+            self.stdscr.clear()
             # Place the border
             # self.stdscr.attron(curses.color_pair(4))
             # self.stdscr.border(1)
@@ -154,7 +211,7 @@ class uiCurses:
             self.stdscr.attroff(curses.A_BOLD)
             # endregion
 
-            #region Body
+            # region Body
             # Index data header
             self.stdscr.addstr(1, 0, dash)
             self.print_table_header(self.index_data)
@@ -167,19 +224,19 @@ class uiCurses:
             # Balance body
             self.stdscr.addstr(dash)
             self.print_table_body(self.portfolio_data)
-            # Pctchange data header
+            # Pctchange spark lines header
             self.stdscr.addstr(dash)
-            self.print_table_header(self.pctchange_data)
-            # Pctchange body
+            self.print_table_header([['NAME', 'LAST EXCHANGE DATA', ], ])
+            # Pctchange spark lines body
             self.stdscr.addstr(dash)
-            self.print_table_body(self.pctchange_data)
+            self.print_spark_lines(self.spark_data)
             # Portfolio optimization settings and results
             self.stdscr.addstr(dash)
             self.print_screen(self.portfolio_opt_data)
             # Screen body
             self.stdscr.addstr(dash)
             self.print_screen(self.screen_data)
-            #endregion
+            # endregion
 
             # region Status bar
             # Prepare statusbar from provided message and other attributes
@@ -204,3 +261,4 @@ class uiCurses:
 
         except Exception as e:
             print(strftime("%H:%M:%S", localtime()), self.statusbar_str)
+    # endregion
