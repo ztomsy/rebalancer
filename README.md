@@ -13,30 +13,60 @@ of rebalancing compound over time - but rebalancing by hand is a pain,
 and that can lead to inconsistency. 
 I pursued this project due to the lack of free tools to simply rebalance an existing portfolio.
 
-My portfolio is spread across various accounts and asset classes, 
+If your portfolio is spread across various accounts and asset classes, 
 so at a minimum this portfolio rebalancer had to consider how to best allocate assets within 
 and across accounts. If new assets were added to the portfolio (based on the target portfolio definition)
 the rebalancer must also handle distributing those new assets into an existing account 
 with adequate funds for it.
+
+Rebalancer is a free and open source crypto trading bot written in Python. 
+It is designed to support all major exchanges and be controlled via settings file, db, *telegram. 
+It contains *backtesting, plotting and money management tools as well as 
+portfolio optimization by machine learning.
 
 A huge shoutout and thanks to the team behind [ccxt](https://github.com/ccxt/ccxt) and 
 [PyPortfolioOpt](https://github.com/robertmartin8/PyPortfolioOpt).
 
 It is free to use and modify for your own strategies and api wrappers.
 
+## Disclaimer
+
+This software is for educational purposes only. Do not risk money which
+you are afraid to lose. USE THE SOFTWARE AT YOUR OWN RISK. THE AUTHORS
+AND ALL AFFILIATES ASSUME NO RESPONSIBILITY FOR YOUR TRADING RESULTS.
+
+Always start by running a trading bot in Dry-run and do not engage money
+before you understand how it works and what profit/loss you should
+expect.
+
+We strongly recommend you to have coding and Python knowledge. Do not
+hesitate to read the source code and understand the mechanism of this bot.
+
+
 ## Getting Started
 
-1. Pull repository from git
-2. python -m pip install requirements
-3. cp _setings.py settings.py
-4. Modify your settings
-4. Run it in various ways:
-    * Simple run it with python run.py 
-    * Use start.sh script to automatically run new tmux session with script
+```bash
+git clone git@bitbucket.org:Nekrasovp/yat-rebalancer.git
+cd yat-rebalancer
+python -m pip install requirements
+cp _setings.py settings.py
+```
+Modify your settings according to the following [Configuration guideline](docs/Configuration.md) 
+and run it in various ways:
+```bash
+python run.py
+```
+or run new tmux session with script and settings file in nano
+```bash
+sh start.sh
+```
+
+For any other type of installation please refer to [Installation doc](docs/Installation.md).
+
 
 ## Operation Overview
 
-This rebalancer works on the following principles:
+This bot works on the following principles:
 
 * Main loop run exchange clients.
 * On each step we fetch all_tickers if available or exact tickers from tickers_list.
@@ -46,31 +76,63 @@ This rebalancer works on the following principles:
 * Converge recommended weights with current portfolio weights.
 * Generate a descriptions of orders we would like to place.
 * Trade it with right account and provider.
-* Cancel unfilled orders.
-* Check settings file and reload on changes.
+* Report on succeed orders.
+* Cancel unfilled orders before generating new recommendations and orders.
+* Check settings file or db and reload on changes.
     
 ## Simplified Output
 
 The following is some of what you can expect when running this program:
 
  
-![screenshot](docs/rebalancer_main_screen.png "Screenshot of one of the earliest version")
+![main_screen](docs/rebalancer_main_screen.png "Main screen of one of the earliest version")
 
-## Roadmap
+## Roadmap and features
 
-- [ ] All base asset support
+- [x] Based on Python 3.7+: For operating on any operating system - Windows, macOS and Linux.
+- [x] Dry-run support to run the bot without playing money.
+- [x] Simple curses gui which works with console, tmux, a ANSI terminal, a Telnet or SSH client
+
+         + Header bar
+         + Footer bar
+         + Simple table printing with colouring
+         + Table header printing
+         + Spark lines with built-in normalization of data
+         + TextWidget
+         + Mouse support
+         - Add curses panels to get more interactive ui
+
+- [x] Support for assets with direct trade market available
+- [ ] 2-leg market data for markets without direct trade to base asset     
+- [x] Settings watcher check file changes to reload the bot(let you control settings with other scripts)
+- [ ] Persistence is achieved through db communication.
         
-        Current quote assets on Binnace are: BTC, ETH, USDT, BNB, TUSD, PAX, USDC, XRP, USDS
-- [ ] All assets portfolio
+        - Database reporting on trades
+        - Report on ohlcv refresh and recomendations calculating
+        - Settings watcher check db for settings change
         
-- [ ] Database reporting on trades
 - [ ] Separate bounds for each asset.
-- [ ] Multiple accounts on same exchange.
 - [ ] Processing multiple time frame ohlcv data.
-- [ ] Order manager with more trading behaviour.
+- [ ] Order manager with more trading behaviour(trailing stop loss, defined either the trader or configuration)
 - [ ] Add more exchanges.
 - [ ] Plotting the efficient frontier.
 - [ ] More optimisation goals
+- [ ] Whitelist assets you want to trade or use dynamic whitelists.
+- [ ] Blacklist assets you want to avoid.
+- [ ] Manage the bot with Telegram.
+        
+        - Display your profit/loss in fiat.
+        - Provide a daily summary of your profit/loss.
+        - Provide a performance status of your current trades.
+
+- [ ] Market state optimization by machine learning to optimize your bot parameters.
+
+
+## Exchange marketplaces supported
+- [x] [Binance](https://www.binance.com/)
+- [ ] [Kucoin](https://www.kucoin.com/)
+- [ ] [100+ others to tests](https://github.com/ccxt/ccxt/). _(We cannot guarantee they will work)_
+
 
 ## Troubleshooting
 
