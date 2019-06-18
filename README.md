@@ -107,18 +107,23 @@ The following is some of what you can expect when running this program:
 - [x] Settings watcher check file changes to reload the bot(let you control settings with other scripts)
 - [ ] Persistence is achieved through db communication.
         
-        - Database reporting on trades
+        + Database reporting on trades
         - Report on ohlcv refresh and recomendations calculating
         - Settings watcher check db for settings change
+        - Check db on start for previous state on reboot
         
 - [ ] Separate bounds for each asset.
-- [ ] Processing multiple time frame ohlcv data.
-- [ ] Order manager with more trading behaviour(trailing stop loss, defined either the trader or configuration)
-- [ ] Add more exchanges.
-- [ ] Plotting the efficient frontier.
-- [ ] More optimisation goals
+- [ ] Optimisation goals for portfolio
+        
+        + 'Markowitz portfolio', minimising volatility for a given target_return
+        + Sharpe-maximising portfolio for a given volatility(max return for a target_risk)
+        + Minimise volatility
+        + Maximise the Sharpe Ratio
+        - Processing multiple time frame ohlcv data to define more parameters for optimization.
+- [ ] Order manager with more trading behaviour(trailing stop loss, defined either the trader or settings)
 - [ ] Whitelist assets you want to trade or use dynamic whitelists.
 - [ ] Blacklist assets you want to avoid.
+- [ ] Plotting the efficient frontier.
 - [ ] Manage the bot with Telegram.
         
         - Display your profit/loss in fiat.
