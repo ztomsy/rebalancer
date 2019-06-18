@@ -1,5 +1,6 @@
 """
-Ugly curses interface which support:
+Built on curses user interface for console, a hardware ANSI terminal, a Telnet or SSH client,
+or similar which support:
  - Header bar
  - Footer bar
  - Simple table printing with colouring
