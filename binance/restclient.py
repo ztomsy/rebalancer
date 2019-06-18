@@ -23,11 +23,11 @@ class RestClient:
         self._secret = secret
         self._api_key = api_key
         self.exchange: ccxt.binance = ccxt.binance({"apiKey": self._api_key,
-                                      "secret": self._secret,
-                                      'verbose': verbose,
-                                      'options': {'adjustForTimeDifference': True,
-                                                  'defaultTimeInForce': 'GTC', },  # 'GTC', 'IOC'
-                                      'enableRateLimit': True})
+                                                    "secret": self._secret,
+                                                    'verbose': verbose,
+                                                    'options': {'adjustForTimeDifference': True,
+                                                                'defaultTimeInForce': 'GTC', },  # 'GTC', 'IOC'
+                                                    'enableRateLimit': True})
         self.exchange_name = self.exchange.describe()['id']
         # Initialize the Orderbook with a set of empty dicts and other defaults
         self.orderbook = Orderbook(window, logger)
@@ -125,6 +125,7 @@ class RestClient:
     def cancel_order(self, orderId=None, symbol=None):
         """
         Cancel order by symbol and order id
+
         :param orderId:
         :param symbol:
         :return:
@@ -251,6 +252,7 @@ class RestClient:
         """
         Check for tickers list or iterate throw all tickers to add spread, mid_price data.
         Add data to self.all_tickers container
+
         :param tickers: list of valid tickers
         :return:
         """
@@ -287,6 +289,7 @@ class RestClient:
         Call http api for all tickers data.
         Delete empty responses from all_tickers dict.
         Calculate inplace data for tickers and add timestamp of calculation.
+
         :param tickers: pass tickers list to process only that tickers
         :type tickers: list
         """
@@ -313,9 +316,9 @@ class RestClient:
 
     def _fetch_ticker(self, symbol):
         """
-        Fetch symbol ticker
-        :param symbol:
-        :return:
+        Fetch symbol ticker and update all_tickers dict
+
+        :param symbol: market symbol
         """
         try:
             response = self.exchange.fetch_ticker(symbol)
