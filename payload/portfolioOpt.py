@@ -67,58 +67,51 @@ class PortfolioOpt:
             .loc[start_date:end_date] \
             .dropna(axis=1, how='any') \
             .iloc[[0, -1]]
-
         df_weights = pd.DataFrame([weights])
         pricing_changes = df_pricing.pct_change()
         filtered_pricing = pricing_changes.tail(1).filter(axis=1, items=weights.keys())
-
         range_begin, range_end = pricing_changes.index.values
         wavg_return = (df_weights.values * filtered_pricing.values).sum()
-
         return range_begin, range_end, wavg_return
 
-    def build_pricing_data_from_ohlcv(self, portfolio_ohlcv: dict, base_asset: str):
+    def build_pricing_data_from_ohlcv(self, portfolio_ohlcv: dict, base_asset: str) -> dict:
         """
-        Build new pricing dict from portfolio_ohlcv 'close' column
-        Add '1' price column for base asset.
+        Build new column names from market to asset name.
 
-        :param portfolio_ohlcv: pricing data
+        Build new pricing dict from portfolio_ohlcv 'close' column
+        and flip prices if necessary.
+
+        Add base asset column with price equal to '1'.
+
+        :param portfolio_ohlcv: Pricing data
         :type portfolio_ohlcv: dict
+        :param base_asset: Base asset
+        :type base_asset: str
         :return: Formated pricing data dict
         :rtype: dict
         """
-        # Convert names
-        assets_list = []
-        for m in portfolio_ohlcv.keys():
-            asset1, asset2 = m.split('/')  # m[0:m.index('/')]
-            if asset1 != base_asset:
-                assets_list.append(asset1)
-            else:
-                assets_list.append(asset2)
-        # assets_list = [x for x in portfolio_ohlcv.keys()]
+
         data_c = pd.DataFrame()
-        for i, j in portfolio_ohlcv.items():
-            data = j
-            data = numpy.array(data)
-            data = data.transpose()
+        for m, ohlcv in portfolio_ohlcv.items():
+            data = numpy.array(ohlcv).transpose()
             data = {"date":   data[0], "o": data[1], "h": data[2],
                     "l": data[3], "c": data[4], "v": data[5]}
             data = pd.DataFrame(data)
             data["date"] = data["date"].apply(lambda x: ctime(x / 1000.0))
             data = data.set_index("date")
-            data_c[i] = data['c']
+            asset1, asset2 = m.split('/')
+            if asset1 != base_asset:
+                data_c[asset1] = data['c']
+            else:
+                # Flip price for markets like asset/base_asset
+                data_c[asset2] = data['c'].apply(lambda x: 1/x)
 
-        data_c.columns = [assets_list]
         # Add new column with 1 price for base asset
         data_c[base_asset] = 1
         return data_c
 
-    def generate_report(self, pricing_data: dict = None,
-                        weight_bounds: tuple = None,
-                        base_asset: str = None,
-                        frequency: int = None,
-                        target_return: float = None,
-                        target_risk: float = None):
+    def generate_report(self, pricing_data: dict = None, weight_bounds: tuple = None, base_asset: str = None,
+                        frequency: int = None, target_return: float = None, target_risk: float = None):
         # Transform prices ohlcv data and add 1 price base asset column
         p_d = deepcopy(self.build_pricing_data_from_ohlcv(pricing_data, base_asset))
         # Generate EfficientFrontier Portfolio
@@ -146,7 +139,7 @@ class PortfolioOpt:
             analysis_range_begin,
             analysis_range_end,
             non_zero_weights)
-        proper_weights = {x[0]: y for x, y in cleaned_weights.items()}
+        # proper_weights = {x[0]: y for x, y in cleaned_weights.items()}
         # Prepare list to pass to ui api
         p_list = []
         p_list.append("Period: {} - {}".format(str(range_begin), str(range_end)))
@@ -159,7 +152,7 @@ class PortfolioOpt:
         # rebal_str = ["{}:{:.2f}%".format(str(k[0]), 100 * v) for k, v in sorted(non_zero_weights.items(),
         #                                                                          key=lambda kv: -kv[1])]
         # p_list.append(rebal_str)
-        return proper_weights, p_list
+        return cleaned_weights, p_list
 
     # endregion
 
