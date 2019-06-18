@@ -120,6 +120,7 @@ The following is some of what you can expect when running this program:
         + Minimise volatility
         + Maximise the Sharpe Ratio
         - Processing multiple time frame ohlcv data to define more parameters for optimization.
+        
 - [ ] Order manager with more trading behaviour(trailing stop loss, defined either the trader or settings)
 - [ ] Whitelist assets you want to trade or use dynamic whitelists.
 - [ ] Blacklist assets you want to avoid.
