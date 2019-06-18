@@ -40,7 +40,10 @@ class Runner(object):
         self.ui.print_ui()
         self.ui.header_str = "Portfolio ReBalancer build:{}".format(kwargs['BUILD_DATE'])
         # Init database connection
-        self.influx = Influx(kwargs['INFLUX_DATA'])
+        if 'INFLUX_DATA' in kwargs and len(kwargs['INFLUX_DATA']) > 0:
+            self.db = Influx(**kwargs['INFLUX_DATA'])
+        else:
+            self.db = None
         # Init portfolio
         self.portfolio = kwargs['PORTFOLIO']
         self.rebalancing_precision = kwargs['REBALANCING_PRECISION']
@@ -412,9 +415,11 @@ class Runner(object):
     def _update_db_with_succeed_trades(self, order_history: dict):
         """Update provided db with succeed orders
         """
+        if not self.db:
+            return
         for o in order_history.values():
             if o['status'] == 'closed' or (o['status'] == 'open' and o['filled'] > 0):
-                self.influx.report_order(o, 'rebalancer', 'binance')
+                self.db.report_order(o, 'rebalancer', 'binance')
     # endregion
 
     def _wait_timeout(self):
