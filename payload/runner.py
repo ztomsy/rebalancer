@@ -43,8 +43,6 @@ class Runner(object):
         self.influx = Influx(kwargs['INFLUX_DATA'])
         # Init portfolio
         self.portfolio = kwargs['PORTFOLIO']
-        # Init index values
-        self.scindex = [_ for _ in self.portfolio.keys()]
         self.rebalancing_precision = kwargs['REBALANCING_PRECISION']
         self.portfolio_base_asset = kwargs['PORTFOLIO_BASE_ASSET']
         self.portfolio_base_amount: float = 0
@@ -72,31 +70,40 @@ class Runner(object):
                                           marketonly=self.market_only)
         self.data_provider_list.append(self.exchange.exchange_name)
         # self.data_provider_list.append([self.exchange.exchange_name, self.exchange])
-        # Load index markets
-        # self.scindex_markets = [x for x, y in self.exchange.markets.items() if (y['base'] in self.scindex and y[
-        #     'quote'] == 'BTC') or (y['quote'] in self.scindex and y['base'] == 'BTC')]
         # Get all tickers
         self.exchange.process_tickers()
-
-        self.portfolio_base_markets = [x for x, y in self.exchange.markets.items() if (y['base'] in self.portfolio_assets
-                                                                                       and y['quote'] ==
-                                                                                       self.portfolio_base_asset) or (y['quote'] in self.portfolio_assets
-                                                                                        and y['base'] ==
-                                                                                        self.portfolio_base_asset)]
-        self.exchange.calc_tickers(self.portfolio_base_markets)
-
+        # Define markets and filter assets with direct markets only
+        # TODO implement 2 legs trade and markets data
+        self.portfolio_base_markets, self.portfolio_assets = self.build_portfolio_base_markets(
+                self.exchange.markets, self.portfolio_assets, self.portfolio_base_asset)
         # Run main loop and close threads on exit
         try:
             self.run_balancer()
         finally:
             try:
-                curses.endwin()
+                self.ui.teardown()
                 # self.logger.info("Closing curses")
             finally:
                 pass
             # self.logger.info("Shutdown application")
             # self.exchange2.execute.shutdown()
             # self.exchange.order_history_to_pickle(self.cache_path)
+
+    @staticmethod
+    def build_portfolio_base_markets(markets: dict, portfolio_assets: list, portfolio_base_asset: str):
+        # Build new assets and markets list
+        pa_list = []
+        pbm_list = []
+        # Filter assets with only direct markets available
+        for x, y in markets.items():
+            if (y['base'] in portfolio_assets and y['quote'] == portfolio_base_asset):
+                pbm_list.append(x)
+                pa_list.append(y['base'])
+            if (y['quote'] in portfolio_assets and y['base'] == portfolio_base_asset):
+                pbm_list.append(x)
+                pa_list.append(y['quote'])
+        pa_list.append(portfolio_base_asset)
+        return pbm_list, pa_list
 
     # region Index data
     def _update_index_data(self):
@@ -110,6 +117,7 @@ class Runner(object):
                                        "{:.4f}".format(ticker['mid_price']),
                                        "{:.4f}".format(ticker['spread']),
                                        "{:.4f}".format(ticker['spread_p'])])
+
     # endregion
 
     # region Portfolio data
@@ -156,15 +164,24 @@ class Runner(object):
         :return: amount counted in base asset price
         :rtype: float
         """
+        asset = asset
+        pbasset = self.portfolio_base_asset
         try:
-            if asset == self.portfolio_base_asset:
+            if asset == pbasset:
                 base_balance = self.balances[asset]['all']
             elif asset == 'USDT':
                 base_balance = self.balances[asset]['all'] / self.portfolio_ohlcv[
-                    "{}/{}".format(self.portfolio_base_asset, asset)][-1][4]
+                    "{}/{}".format(pbasset, asset)][-1][4]
+            elif asset == 'BTC':
+                if self.portfolio_base_asset == 'USDT':
+                    base_balance = self.balances[asset]['all'] * self.portfolio_ohlcv[
+                        "{}/{}".format(asset, pbasset)][-1][4]
+                else:
+                    base_balance = self.balances[asset]['all'] / self.portfolio_ohlcv[
+                        "{}/{}".format(pbasset, asset)][-1][4]
             else:
                 base_balance = self.balances[asset]['all'] * self.portfolio_ohlcv[
-                    "{}/{}".format(asset, self.portfolio_base_asset)][-1][4]
+                    "{}/{}".format(asset, pbasset)][-1][4]
             return base_balance
         except KeyError:
             return 0.0
@@ -213,6 +230,7 @@ class Runner(object):
 
     # region Price change data
     def _update_pctchange_data(self) -> None:
+        self._update_pctchange_sparkline()
         self.ui.pctchange_data.clear()
         self.ui.pctchange_data = [['NAME', 'PROVIDER', '1H%', '3H%', '12H%', '24H%', '72H%']]
         for m in self.portfolio_base_markets:
@@ -223,6 +241,17 @@ class Runner(object):
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-13][4])/p),
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-25][4])/p),
                                         "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-73][4])/p)])
+
+    def _update_pctchange_sparkline(self):
+        """
+        Create list from last 58 values of ohlcv for each presented base market
+
+        :return:
+        """
+        self.ui.spark_data.clear()
+        for n in self.portfolio_base_markets:
+            self.ui.spark_data[n] = [x[4] for x in self.portfolio_ohlcv[n]][-58:]
+
     # endregion
 
     # region Portfolio quotes processor
@@ -379,6 +408,13 @@ class Runner(object):
                 self.ui.reload_ui(screen_data=quotes_history_info[:5])
         else:
             self.ui.reload_ui(screen_data='Missing quote_collector')
+
+    def _update_db_with_succeed_trades(self, order_history: dict):
+        """Update provided db with succeed orders
+        """
+        for o in order_history.values():
+            if o['status'] == 'closed' or (o['status'] == 'open' and o['filled'] > 0):
+                self.influx.report_order(o, 'rebalancer', 'binance')
     # endregion
 
     def _wait_timeout(self):
@@ -408,6 +444,7 @@ class Runner(object):
                     self.exchange.fetch_processed_orders()
                     self.ui.reload_ui(statusbar_str="Canceling orders")
                     self.exchange.cancel_processed_orders()
+                    self._update_db_with_succeed_trades(self.exchange.order_history)
                     self.exchange.order_history.clear()
                     quotes_info = [x for x in self.quote_collector]
                     self.ui.reload_ui(statusbar_str="Load tickers", screen_data=quotes_info)
