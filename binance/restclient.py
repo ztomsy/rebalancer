@@ -32,7 +32,11 @@ class RestClient:
         # Initialize the Orderbook with a set of empty dicts and other defaults
         self.orderbook = Orderbook(window, logger)
         # Load markets on initialization
-        self.markets = self.exchange.load_markets()
+        try:
+            self.markets = self.exchange.load_markets()
+        except:
+            self.logger.error('Exchange connection problem!')
+            sys.exit(56)
         # Sort only active markets
         self.markets = {x: y for x, y in self.markets.items() if y['active']}
         self.all_tickers: dict = None
