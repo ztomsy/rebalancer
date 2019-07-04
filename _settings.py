@@ -1,3 +1,4 @@
+
 ########################################################################################################################
 # Portfolio settings
 ########################################################################################################################
@@ -7,21 +8,26 @@ PORTFOLIO_BASE_ASSET = 'USDT'
 
 # Specify the assets that you hold. These will be used in portfolio calculations.
 PORTFOLIO = {
-    'BTC': (0, 1),
-    'ETH': (0, 1),
-    'BNB': (0, 1),
-    'USDT': (0, 1),
-    'TUSD': (0, 1),
-    'PAX': (0, 1),
-    'USDC': (0, 1),
-    'XRP': (0, 1),
-    'USDS': (0, 1), }
+    'BTC': (0.05, 0.9),
+    'ETH': (0.05, 0.9),
+    'BNB': (0.05, 0.9),
+    # 'USDT': (0.05, 0.9),
+    # 'TRX': (0, 1),
+    # 'OMG': (0, 1),
+    # 'ZRX': (0, 1),
+    # 'REP': (0, 1),
+    # 'VET': (0, 1),
+    # 'ICX': (0, 1),
+    # 'ZIL': (0, 1),
+    # 'AE': (0, 1),
+    }
+
 
 ########################################################################################################################
 # Portfolio optimization settings
 ########################################################################################################################
 
-WEIGHT_BOUNDS = (0, 0.8)
+WEIGHT_BOUNDS = (0.05, 0.99)
 
 # Use this settings to define portfolio optimization behaviour
 # Choose only one of next option at the same time
@@ -78,12 +84,13 @@ INFLUX_DATA = {'host': '',
 DRY_RUN = True
 # DRY_RUN = False
 
-BUILD_DATE = '190605'
+# Fetched and displayed timeframes are controlled by this list, first value is used for displaying
+TIME_FRAMES = ['1h', ]
+# TIME_FRAMES = ['1h', '1m']
 
 # How often to re-check and replace orders.
 # Generally, it's safe to make this short if we're fetching
-# from websockets. But if too many order amend/replaces are
-# done, you may hit a ratelimit.
+# from web sockets.
 LOOP_INTERVAL = (40, 60)
 
 # Wait times between orders / errors
@@ -92,5 +99,7 @@ API_ERROR_INTERVAL = 10
 TIMEOUT = 7
 
 # If file changes, reload the bot.
-WATCHED_FILE = '_settings'
+WATCHED_FILE = 'settings.py'
+
+BUILD_DATE = '190704'
 

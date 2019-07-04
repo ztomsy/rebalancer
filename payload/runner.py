@@ -2,6 +2,7 @@
 # encoding: utf-8
 
 from time import sleep, time_ns, time, ctime
+import warnings
 from sys import exit
 from random import randrange, seed
 
@@ -38,7 +39,7 @@ class Runner(object):
         # Init screen with ui
         self.ui = uiCurses()
         self.ui.print_ui()
-        self.ui.header_str = "Portfolio ReBalancer build:{}".format(kwargs['BUILD_DATE'])
+        self.ui.push_data(header_str="Portfolio ReBalancer build:{}".format(kwargs['BUILD_DATE']))
         # Init database connection
         if 'INFLUX_DATA' in kwargs and len(kwargs['INFLUX_DATA']) > 0:
             self.db = Influx(**kwargs['INFLUX_DATA'])
@@ -53,6 +54,7 @@ class Runner(object):
         self.portfolio_weight_bounds = kwargs['WEIGHT_BOUNDS']
         self.portfolio_target_return = kwargs['TARGET_RETURN']
         self.portfolio_target_risk = kwargs['TARGET_RISK']
+        self.portfolio_time_frames = kwargs['TIME_FRAMES']
         self.portfolio_ohlcv = {}
         self.portfolio_current_weights = {}
         self.portfolio_recommended_weights = {}
@@ -76,7 +78,6 @@ class Runner(object):
         # Get all tickers
         self.exchange.process_tickers()
         # Define markets and filter assets with direct markets only
-        # TODO implement 2 legs trade and markets data
         self.portfolio_base_markets, self.portfolio_assets = self.build_portfolio_base_markets(
                 self.exchange.markets, self.portfolio_assets, self.portfolio_base_asset)
         # Run main loop and close threads on exit
@@ -84,8 +85,7 @@ class Runner(object):
             self.run_balancer()
         finally:
             try:
-                self.ui.teardown()
-                # self.logger.info("Closing curses")
+                self.logger.info(self.ui.teardown())
             finally:
                 pass
             # self.logger.info("Shutdown application")
@@ -99,28 +99,47 @@ class Runner(object):
         pbm_list = []
         # Filter assets with only direct markets available
         for x, y in markets.items():
-            if (y['base'] in portfolio_assets and y['quote'] == portfolio_base_asset):
+            if y['base'] in portfolio_assets and y['quote'] == portfolio_base_asset:
                 pbm_list.append(x)
                 pa_list.append(y['base'])
-            if (y['quote'] in portfolio_assets and y['base'] == portfolio_base_asset):
+                portfolio_assets.remove(y['base'])
+            elif y['quote'] in portfolio_assets and y['base'] == portfolio_base_asset:
                 pbm_list.append(x)
                 pa_list.append(y['quote'])
+                portfolio_assets.remove(y['quote'])
+        if len(portfolio_assets) > 0:
+            for a in portfolio_assets:
+                # Define basis swap markets in case there is no direct market to count data.
+                # Maybe change all logic to work with pseudo markets like 'FUEL/BTC.ADA/BTC, 'AE/BTC.BTC/USDT'
+                # FIXME Works only if trade is available through BTC swap markets
+                if f'{a}/BTC' in markets.keys():
+                    pbm_list.append(f'{a}/BTC')
+                    pa_list.append(a)
+                elif f'BTC/{a}' in markets.keys():
+                    pbm_list.append(f'BTC/{a}')
+                    pa_list.append(a)
+
+            if f'{portfolio_base_asset}/BTC' in markets.keys():
+                pbm_list.append(f'{portfolio_base_asset}/BTC')
+            elif f'BTC/{portfolio_base_asset}' in markets.keys():
+                pbm_list.append(f'BTC/{portfolio_base_asset}')
+
         pa_list.append(portfolio_base_asset)
-        return pbm_list, pa_list
+        return list(set(pbm_list)), list(set(pa_list))
 
     # region Index data
     def _update_index_data(self):
         self.ui.index_data.clear()
-        self.ui.index_data = [['NAME', 'PROVIDER', 'TOB ASK', 'TOB BID', 'MID', 'SPREAD', 'SPREAD%'], ]
+        i_data = [['NAME', 'PROVIDER', 'TOB ASK', 'TOB BID', 'MID', 'SPREAD', 'SPREAD%'], ]
         for s in self.portfolio_base_markets:
             ticker = self.exchange.all_tickers[s]
-            self.ui.index_data.append([s, self.exchange.exchange_name,
+            i_data.append([s, self.exchange.exchange_name,
                                        "{:.4f}".format(ticker['ask']),
                                        "{:.4f}".format(ticker['bid']),
                                        "{:.4f}".format(ticker['mid_price']),
                                        "{:.4f}".format(ticker['spread']),
                                        "{:.4f}".format(ticker['spread_p'])])
-
+        self.ui.push_data(index_data=i_data)
     # endregion
 
     # region Portfolio data
@@ -131,9 +150,11 @@ class Runner(object):
             if asset in m:
                 if 'BTC' in m:
                     if asset == 'USDT':
-                        return amount/self.portfolio_ohlcv[m][-1][4]
+                        # return amount/self.portfolio_ohlcv[m][list(self.portfolio_ohlcv[m])[0]][-1][4]
+                        return amount / self.price_from_ohlcv_close(m)
                     else:
-                        return amount*self.portfolio_ohlcv[m][-1][4]
+                        return amount * self.price_from_ohlcv_close(m)
+                        # return amount*self.portfolio_ohlcv[m][list(self.portfolio_ohlcv[m])[0]][-1][4]
 
     def _count_symbol_amount(self, symbol_base, amount):
         """
@@ -147,20 +168,58 @@ class Runner(object):
         :rtype: float
         """
         amount = amount
-        if symbol_base == self.portfolio_base_asset:
-            return amount
+        symbol_base = symbol_base
+        symbol_quote = self.portfolio_base_asset
         try:
-            ask_price = self.exchange.all_tickers["{}/{}".format(
-                    symbol_base, self.portfolio_base_asset)]['ask']
-            return amount / ask_price
+            if symbol_base == symbol_quote:
+                return amount
+            if f'{symbol_base}/{symbol_quote}' in self.exchange.all_tickers.keys():
+                ask_price = self.exchange.all_tickers[f'{symbol_base}/{symbol_quote}']['ask']
+                return amount / ask_price
+            elif f'{symbol_quote}/{symbol_base}' in self.exchange.all_tickers.keys():
+                ask_price = self.exchange.all_tickers[f'{symbol_quote}/{symbol_base}']['ask']
+                return amount * ask_price
+            elif f'{symbol_base}/BTC' in self.exchange.all_tickers.keys():
+                a_btc_price = self.exchange.all_tickers[f'{symbol_base}/BTC']['ask']
+                ba_btc_price = 0
+                if f'{symbol_quote}/BTC' in self.exchange.all_tickers.keys():
+                    ba_btc_price = 1 / self.exchange.all_tickers[f'{symbol_quote}/BTC']['ask']
+                elif f'BTC/{symbol_quote}' in self.exchange.all_tickers.keys():
+                    ba_btc_price = self.exchange.all_tickers[f'BTC/{symbol_quote}']['ask']
+                return amount * a_btc_price * ba_btc_price
+            elif f'BTC/{symbol_base}' in self.exchange.all_tickers.keys():
+                # TODO Add behaviour
+                pass
+
         except KeyError:
-            ask_price = self.exchange.all_tickers["{}/{}".format(
-                    self.portfolio_base_asset, symbol_base)]['ask']
-            return amount * ask_price
+            return 0.0
+        except ZeroDivisionError:
+            return 0.0
+
+    def price_from_ohlcv_close(self, a1: str, a2: str = None):
+        """
+        Get price from last close ohlcv value.
+
+        :Example:
+        price_from_ohlcv_close('BTC/USDT') you can pass proper market name directly as 1 argument
+
+        price_from_ohlcv_close('BTC', 'USDT') or right ordered assets name
+
+        :param a1: Asset 1 or Market name
+        :type a1: str
+        :param a2: Asset 2
+        :type a2: str or None
+        :return: Last close price
+        :rtype: float
+        """
+        m_o = self.portfolio_ohlcv[f'{a1}/{a2}'] if a2 else self.portfolio_ohlcv[a1]
+        i1 = m_o[list(m_o)[-1]]
+        return float(i1[-1][4])
 
     def _count_base_balance(self, asset: str) -> float:
         """
         Count asset in portfolio_base_asset amount.
+        Count through BTC market as 2-leg trade multiplying last close prices.
 
         :param asset: asset name
         :type asset: str
@@ -169,24 +228,36 @@ class Runner(object):
         """
         asset = asset
         pbasset = self.portfolio_base_asset
+        lbm = list(self.portfolio_ohlcv.keys())
+        # Define is there a direct trade with existed market or 2 leg trade through BTC
         try:
             if asset == pbasset:
-                base_balance = self.balances[asset]['all']
-            elif asset == 'USDT':
-                base_balance = self.balances[asset]['all'] / self.portfolio_ohlcv[
-                    "{}/{}".format(pbasset, asset)][-1][4]
-            elif asset == 'BTC':
-                if self.portfolio_base_asset == 'USDT':
-                    base_balance = self.balances[asset]['all'] * self.portfolio_ohlcv[
-                        "{}/{}".format(asset, pbasset)][-1][4]
-                else:
-                    base_balance = self.balances[asset]['all'] / self.portfolio_ohlcv[
-                        "{}/{}".format(pbasset, asset)][-1][4]
-            else:
-                base_balance = self.balances[asset]['all'] * self.portfolio_ohlcv[
-                    "{}/{}".format(asset, pbasset)][-1][4]
-            return base_balance
+                return self.balances[asset]['all']
+            elif f'{asset}/{pbasset}' in lbm:
+                return self.balances[asset]['all'] * self.price_from_ohlcv_close(f'{asset}/{pbasset}')
+            elif f'{pbasset}/{asset}' in lbm:
+                return self.balances[asset]['all'] / self.price_from_ohlcv_close(f'{pbasset}/{asset}')
+            # Find right swap markets for this assets pair
+            elif f'{asset}/BTC' in lbm:
+                a_btc_p = self.price_from_ohlcv_close(f'{asset}/BTC')
+                ba_btc_p = 0
+                if f'{pbasset}/BTC' in lbm:
+                    ba_btc_p = 1 / self.price_from_ohlcv_close(f'{pbasset}/BTC')
+                elif f'BTC/{pbasset}' in lbm:
+                    ba_btc_p = self.price_from_ohlcv_close(f'BTC/{pbasset}')
+                return self.balances[asset]['all'] * a_btc_p * ba_btc_p
+            elif f'BTC/{asset}' in lbm:
+                a_btc_p = 1 / self.price_from_ohlcv_close(f'BTC/{asset}')
+                ba_btc_p = 0
+                if f'{pbasset}/BTC' in lbm:
+                    ba_btc_p = 1 / self.price_from_ohlcv_close(f'{pbasset}/BTC')
+                elif f'BTC/{pbasset}' in lbm:
+                    # With USDSB can happen 3-legs markets.
+                    ba_btc_p = self.price_from_ohlcv_close(f'BTC/{pbasset}')
+                return self.balances[asset]['all'] * a_btc_p * ba_btc_p
         except KeyError:
+            return 0.0
+        except ZeroDivisionError:
             return 0.0
 
     def _count_portfolio_base_amount(self):
@@ -203,7 +274,7 @@ class Runner(object):
 
     def _update_portfolio_data(self):
         self.ui.portfolio_data.clear()
-        self.ui.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'CURRENT%', 'RECOMMEND%', 'DIF%'], ]
+        p_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'CURRENT%', 'RECOMMEND%', 'DIF%'], ]
         for c in self.portfolio_assets:
             try:
                 balance_all = self.balances[c]['all']
@@ -220,41 +291,32 @@ class Runner(object):
             except KeyError:
                 recw = 0
                 difw = 0
-            self.ui.portfolio_data.append([c, self.exchange.exchange_name,
+            p_data.append([c, self.exchange.exchange_name,
                                            "{:.4f}".format(balance_all),
                                            "{:.2f}".format(base_balance),
                                            "{:.2f}".format(100 * bp),
                                            "{:.2f}".format(100 * recw),
                                            "{:.2f}".format(100 * difw)])
-        self.ui.portfolio_data.append(['ALL', self.exchange.exchange_name, '-',
+        p_data.append(['ALL', self.exchange.exchange_name, '-',
                                        "{:.2f}".format(self.portfolio_base_amount), '-', '-', '-', ])
+        self.ui.push_data(portfolio_data=p_data)
 
     # endregion
 
     # region Price change data
-    def _update_pctchange_data(self) -> None:
-        self._update_pctchange_sparkline()
-        self.ui.pctchange_data.clear()
-        self.ui.pctchange_data = [['NAME', 'PROVIDER', '1H%', '3H%', '12H%', '24H%', '72H%']]
-        for m in self.portfolio_base_markets:
-            p = self.portfolio_ohlcv[m][-1][4]
-            self.ui.pctchange_data.append([m, 'binance',
-                                        "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-2][4])/p),
-                                        "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-4][4])/p),
-                                        "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-13][4])/p),
-                                        "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-25][4])/p),
-                                        "{:+.2f}".format(100*(p-self.portfolio_ohlcv[m][-73][4])/p)])
-
-    def _update_pctchange_sparkline(self):
+    def _update_pctchange_sparkline(self, apparent_length: int = 58, ):
         """
-        Create list from last 58 values of ohlcv for each presented base market
+        Create dict of lists from last apparent_length values of ohlcv for each presented base market
+        Used first mentioned in time_frames list time frame.
 
-        :return:
+        :param apparent_length: Length of visible part of spark line.
+                              Used for visualisation and depends on screen size.
         """
         self.ui.spark_data.clear()
-        for n in self.portfolio_base_markets:
-            self.ui.spark_data[n] = [x[4] for x in self.portfolio_ohlcv[n]][-58:]
-
+        s_data = dict()
+        for m in self.portfolio_base_markets:
+            s_data[m] = [x[4] for x in self.portfolio_ohlcv[m][self.portfolio_time_frames[0]][-apparent_length:]]
+        self.ui.push_data(spark_data=s_data)
     # endregion
 
     # region Portfolio quotes processor
@@ -346,32 +408,26 @@ class Runner(object):
         # !!!Avoid refactoring before implementing non base assets!!!
         for a, b in rw_pos.items():
             for c, d in rw_neg.items():
-                if "{}/{}".format(a, c) in pcmall_s:
-                    symbol = "{}/{}".format(a, c)
+                if f'{a}/{c}' in pcmall_s:
                     base_amount = min(abs(b['base_amount']), abs(d['base_amount']))
-                    # TODO Implement crossing spread behaviour
-                    price = t[symbol]['bid']
                     amount = rounded_to_precision(self._count_symbol_amount(a, base_amount), 8)
                     # Avoid small amount quotes
                     if amount < 1e-6:
                         break
-                    side = 'BUY'
-                    order_type = 'LIMIT'
-                    self.quote_collector.append({'symbol': symbol, 'order_type': order_type, 'side': side,
+                    # TODO Implement crossing spread behaviour
+                    price = t[f'{a}/{c}']['bid']
+                    self.quote_collector.append({'symbol': f'{a}/{c}', 'order_type': 'LIMIT', 'side': 'BUY',
                                                  'amount': amount, 'price': price})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
-                elif "{}/{}".format(c, a) in pcmall_s:
-                    symbol = "{}/{}".format(c, a)
+                elif f'{c}/{a}' in pcmall_s:
                     base_amount = min(abs(b['base_amount']), abs(d['base_amount']))
-                    price = t[symbol]['ask']
                     amount = rounded_to_precision(self._count_symbol_amount(c, base_amount), 8)
                     # Avoid small amount quotes
                     if amount < 1e-6:
                         break
-                    side = 'SELL'
-                    order_type = 'LIMIT'
-                    self.quote_collector.append({'symbol': symbol, 'order_type': order_type, 'side': side,
+                    price = t[f'{c}/{a}']['ask']
+                    self.quote_collector.append({'symbol': f'{c}/{a}', 'order_type': 'LIMIT', 'side': 'SELL',
                                                  'amount': amount, 'price': price})
                     rw_neg[c]['base_amount'] += base_amount
                     rw_pos[a]['base_amount'] -= base_amount
@@ -449,6 +505,7 @@ class Runner(object):
                     self.exchange.fetch_processed_orders()
                     self.ui.reload_ui(statusbar_str="Canceling orders")
                     self.exchange.cancel_processed_orders()
+                    # self.exchange.fetch_processed_orders()
                     self._update_db_with_succeed_trades(self.exchange.order_history)
                     self.exchange.order_history.clear()
                     quotes_info = [x for x in self.quote_collector]
@@ -460,8 +517,13 @@ class Runner(object):
                     # Fill ohlcv data
                     self.ui.reload_ui(statusbar_str="Load ohlcv")
                     self.portfolio_ohlcv.clear()
-                    for _ in self.portfolio_base_markets:
-                        self.portfolio_ohlcv[_] = self.exchange.get_ohlcv(_, timeframe='1h', limit=200)
+                    self.portfolio_ohlcv = self.exchange.process_ohlcv(markets=self.portfolio_base_markets,
+                                                                       time_frames=self.portfolio_time_frames,
+                                                                       limit=24)
+                    # for _ in self.portfolio_base_markets:
+                    #     self.portfolio_ohlcv[_] = self.exchange.get_ohlcv(_, timeframe='1h', limit=200)
+                    exp_return_periods = 24
+                    risk_model_periods = 24
                     # Fill balances data
                     self.ui.reload_ui(statusbar_str="Load balances")
                     self.exchange.fetch_balances()
@@ -470,17 +532,18 @@ class Runner(object):
                     self._update_portfolio_current_weights()
                     # Add data to lists for ui
                     self._update_index_data()
-                    self._update_pctchange_data()
+                    self._update_pctchange_sparkline()
                     self._update_portfolio_data()
                     # Calculate optimize portfolio
                     self.ui.reload_ui(statusbar_str="Optimize portfolio")
-                    d_frequency = 200
                     # Get recommended weights from optimizer
                     self.portfolio_recommended_weights, p_list = PortfolioOpt().generate_report(
-                            pricing_data=self.portfolio_ohlcv,
+                            ohlcv_data=self.portfolio_ohlcv,
+                            time_frames=self.portfolio_time_frames,
                             weight_bounds=self.portfolio_weight_bounds,
                             base_asset=self.portfolio_base_asset,
-                            frequency=d_frequency,
+                            exp_return_periods=exp_return_periods,
+                            risk_model_periods=risk_model_periods,
                             target_return=self.portfolio_target_return,
                             target_risk=self.portfolio_target_risk)
                     self.ui.reload_ui(portfolio_opt_data=p_list)

@@ -103,7 +103,7 @@ The following is some of what you can expect when running this program:
          - Add curses panels to get more interactive ui
 
 - [x] Support for assets with direct trade market available
-- [ ] 2-leg market data for markets without direct trade to base asset     
+- [x] 2-leg market data for markets without direct trade to base asset     
 - [x] Settings watcher check file changes to reload the bot(let you control settings with other scripts)
 - [ ] Persistence is achieved through db communication.
         
@@ -112,15 +112,16 @@ The following is some of what you can expect when running this program:
         - Settings watcher check db for settings change
         - Check db on start for previous state on reboot
         
-- [ ] Separate bounds for each asset.
-- [ ] Optimisation goals for portfolio
+- [x] Optimisation goals for portfolio
         
         + 'Markowitz portfolio', minimising volatility for a given target_return
         + Sharpe-maximising portfolio for a given volatility(max return for a target_risk)
         + Minimise volatility
         + Maximise the Sharpe Ratio
-        - Processing multiple time frame ohlcv data to define more parameters for optimization.
+        + Processing multiple time frame ohlcv data to define more parameters for optimization.
+        - Design Custom ScipyOptimizer with new weight_bounds generation behaviour
         
+- [ ] Separate bounds for each asset.
 - [ ] Order manager with more trading behaviour(trailing stop loss, defined either the trader or settings)
 - [ ] Whitelist assets you want to trade or use dynamic whitelists.
 - [ ] Blacklist assets you want to avoid.
@@ -143,6 +144,11 @@ The following is some of what you can expect when running this program:
 ## Troubleshooting
 
 Common errors had seen:
+
+While we use Sequential Least SQuares Programming (SLSQP) for optimization, 
+we have unexpected behaviour when we use small amount of data(less then 4 time periods).
+Problems also happens when you use unconsistent data with big differences and small amount of periods.
+Read more [here](https://github.com/scipy/scipy/issues/7519)
 
 
 ## Compatibility
