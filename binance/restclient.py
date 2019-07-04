@@ -29,6 +29,21 @@ class RestClient:
                                                                 'defaultTimeInForce': 'GTC', },  # 'GTC', 'IOC'
                                                     'enableRateLimit': True})
         self.exchange_name = self.exchange.describe()['id']
+        self.possible_timeframes = {
+            '1m':  '1m',
+            '3m':  '3m',
+            '5m':  '5m',
+            '15m': '15m',
+            '30m': '30m',
+            '1h':  '1h',
+            '2h':  '2h',
+            '4h':  '4h',
+            '6h':  '6h',
+            '8h':  '8h',
+            '12h': '12h',
+            '1d':  '1d',
+            '3d':  '3d',
+            '1w':  '1w', }
         # Initialize the Orderbook with a set of empty dicts and other defaults
         self.orderbook = Orderbook(window, logger)
         # Load markets on initialization
@@ -50,6 +65,38 @@ class RestClient:
         self.balances = list()
 
     # region Order
+
+    def check_order_limits(self, order: dict):
+        """
+        :param order: Order dict
+        :type order: dict
+        :return: False if limits not passed, otherwise True
+        :rtype: bool
+        """
+        symbol = order['symbol']
+        order['cost'] = order['price'] * order['amount']
+        limits = self.markets[symbol]['limits']
+        for p, v in order.items():
+            if p in limits.keys():
+                min_v = limits[p]['min'] if limits[p]['min'] is not None else -float('Inf')
+                max_v = limits[p]['max'] if limits[p]['max'] is not None else float('Inf')
+                if not (min_v < v < max_v):
+                    return False
+        return True
+
+
+
+        # cost = float(amount) * float(price)
+        # for l, v in limits.items:
+        #     if < v.max and
+        # if limits['cost']['max'] > cost > limits['cost']['min']:
+        #     return True
+        # if limits['price']['max'] > price > limits['price']['min']:
+        #     return True
+        # if limits['amount']['max'] > amount > limits['amount']['min']:
+        #     return True
+
+        return False
 
     def place_multiple_orders(self, quotes: list):
         """
@@ -101,21 +148,20 @@ class RestClient:
         # Build order dict
         order_dict = dict(symbol=symbol, type=order_type,
                           side=side, amount=amount, price=price)
+        # Check market filters before quoting
+        if not self.check_order_limits(order_dict):
+            order_dict['status'] = 'limits not passed'
+            order_dict['timestamp'] = time_ns()
+            order_dict['client_order_id'] = client_order_id
+            return order_dict
+
         #On dry run return order_dict
         if self.dry_run:
             order_dict['status'] = 'DRY_RUN'
             order_dict['timestamp'] = time_ns()
             order_dict['client_order_id'] = client_order_id
             return order_dict
-        # Check market filters before quoting
-        # TODO Check all limits
-        if amount and price:
-            cost = float(amount) * float(price)
-            if self.markets[symbol]['limits']['cost']['min'] > cost:
-                order_dict['status'] = 'below_min_cost_limit'
-                order_dict['timestamp'] = time_ns()
-                order_dict['client_order_id'] = client_order_id
-                return order_dict
+
         try:
             order_c = self.exchange.create_order(**order_dict)
             order_c['client_order_id'] = client_order_id
@@ -146,6 +192,17 @@ class RestClient:
         else:
             return False
 
+    def fetch_open_orders(self, markets: list):
+        if not isinstance(markets, list):
+            self.logger.error("Define markets for fetching open orders!")
+            return 0
+        for m in markets:
+            try:
+                resp = self.exchange.fetch_open_orders(m)
+                self.order_history[resp['orderId']] = resp
+            except Exception as e:
+                self.logger.error('While fetching orders next error occur: ', type(e).__name__, "!!!", e.args)
+
     def fetch_processed_orders(self):
         """
         Update status or orders in order_history,
@@ -174,6 +231,19 @@ class RestClient:
                 except Exception as e:
                     self.order_history[x]['status'] = type(e).__name__
 
+    def cancel_all_orders(self, symbol: str = None, orders: dict = None):
+        if symbol is None and orders is None:
+            self.logger.warning("Use with symbol or orders dict params!")
+            return 0
+        if orders is not None:
+            for o in orders.values():
+                self.exchange.cancel_order(o['id'])
+        if symbol is not None:
+            open_orders = self.exchange.fetch_open_orders(symbol=symbol)
+            for o in open_orders.values():
+                self.exchange.cancel_order(o['id'])
+
+
     # endregion
 
     # region Balance
@@ -198,7 +268,6 @@ class RestClient:
         except Exception as e:
             # print(type(e).__name__, e.args, str(e))
             self.logger.error('While fetching tickers next error occur: ', type(e).__name__, "!!!", e.args)
-            self.logger.error("Exiting")
             self.balances.clear()
             # sys.exit()
 
@@ -222,31 +291,59 @@ class RestClient:
             # self.update_ob(resp, run_step, spread_lag_size)
         except Exception as e:
             self.logger.exception('While fetching orderbook next error occur:', exc_info=True)
-            # print(type(e).__name__, e.args, str(e))
-            # print('While fetching orderbook next error occur: ', type(e).__name__, "-", str(e))
-            # print("Exiting")
             sys.exit(56)
 
     # endregion
 
     # region OHLCV Candles
 
-    def get_ohlcv(self, symbol, timeframe='1m', limit=500):
-        '''
-        Fetch exchanges ticker for necessary pair
+    def get_ohlcv(self, symbol, timeframe: str = '1h', limit: int = 200):
+        """Fetch exchanges ticker for necessary pair, timeframe and length
+
         :param symbol: Symbol (i.e. BNB/BTC)
         :param timeframe: 1m, 5m...
-        :additional param since: by default return since now
-        :addition param limit: default == max == 500
-        :return: ccxt ohlcv
-        '''
+        :param limit: default == max == 500
+        :return: ccxt ohlcv dict
+        :rtype: dict
+        """
         try:
             response = self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
         except Exception as e:
             self.logger.error("While fetching ohlcv next error occur: {}\n{}\n".format(type(e).__name__, e.args))
             self.logger.error("Exiting")
-            sys.exit()
+            sys.exit(56)
         return response
+
+    def process_ohlcv(self, markets: list, time_frames: list = None, limit: int = 100):
+        """Process multiple timeframes ohlcv data for markets in a list
+
+        :type markets: list
+        :type time_frames: list or None
+        :type limit: int
+        :return: Portfolio ohlcv dict
+        :rtype: dict
+        """
+        if not isinstance(markets, list):
+            return {}
+        if len(markets) < 1:
+            return {}
+        if time_frames is None or not isinstance(time_frames, list):
+            time_frames = ['1h', ]
+        if not isinstance(limit, int):
+            limit = 100
+        if limit < 20:
+            self.logger.warning("Minimum recommended limit is 20")
+            limit = 20
+        ptf = self.possible_timeframes
+        intersection = [i for i in time_frames if i in ptf]
+        if len(intersection) > 0:
+            time_frames = intersection
+        else:
+            return {}
+        portfolio_ohlcv = dict()
+        for m in markets:
+            portfolio_ohlcv[m] = {ptf[tf]: self.get_ohlcv(m, tf, limit) for tf in time_frames}
+        return portfolio_ohlcv
 
     # endregion
 
@@ -303,7 +400,6 @@ class RestClient:
 
     def get_all_tickers(self):
         """
-        Blocking method!
         Fetch exchanges tickers for all pairs
         Save response to all_tickers, clear previous state
         """
