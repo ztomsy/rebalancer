@@ -29,12 +29,11 @@ class uiCurses:
                            ['-', '-', 0, 0, 0, 0, 0], ]
         self.portfolio_data = [['NAME', 'PROVIDER', 'BALANCE', 'BASEPRICE', 'CURRENT%', 'RECOMMEND%', 'DIF%'],
                                ['-', '-', 0, 0, 0, 0, 0], ]
-        self.pctchange_data = [['NAME', 'PROVIDER', '1H%', '3H%', '12H%', '24H%', '72H%'],
-                               ['-', '-', 0, 0, 0, 0, 0], ]
         self.portfolio_opt_data = [' ', ]
         self.screen_data = [' ', ]
         self.spark_data = {'': [randint(100, 140) for _ in range(10)], }
-        self.block_vertical = [chr(x) for x in range(0x2581, 0x2589)]  # fill with ascii symbols
+        # Fill with ascii symbols
+        self.block_vertical = [chr(x) for x in range(0x2581, 0x2589)]
         self.block_horizontal = [chr(x) for x in range(0x258F, 0x2587, -1)]
         # Init curses screen
         try:
@@ -80,6 +79,9 @@ class uiCurses:
             curses.nocbreak()
             curses.echo()
             curses.endwin()
+            return 'Curses ui have been shutdown'
+        else:
+            return 'Return console to normal state'
 
     def init_colors(self):
         """
@@ -124,7 +126,8 @@ class uiCurses:
 
     def print_screen(self, data: list):
         for s in data:
-            self.stdscr.addstr(str(s))
+            _, x = self.stdscr.getmaxyx()
+            self.stdscr.addstr(str(s[:x-1]))
             self.stdscr.addstr("\n")
 
     @staticmethod
@@ -169,15 +172,15 @@ class uiCurses:
     # region Update and Compose
     def push_data(self, statusbar_str: str = None, header_str: str = None,
                   index_data: list = None, portfolio_data: list = None,
-                  pctchange_data: list = None, portfolio_opt_data: list = None,
-                  screen_data: list = None):
+                  portfolio_opt_data: list = None, screen_data: list = None,
+                  spark_data: dict = None):
         if header_str is not None: self.header_str = header_str
         if statusbar_str is not None: self.statusbar_str = statusbar_str
         if index_data is not None: self.index_data = index_data
         if portfolio_data is not None: self.portfolio_data = portfolio_data
-        if pctchange_data is not None: self.pctchange_data = pctchange_data
         if portfolio_opt_data is not None: self.portfolio_opt_data = portfolio_opt_data
         if screen_data is not None: self.screen_data = screen_data
+        if spark_data is not None: self.spark_data = spark_data
 
     def reload_ui(self, **kwargs):
         self.push_data(**kwargs)
