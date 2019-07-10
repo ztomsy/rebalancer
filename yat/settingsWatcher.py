@@ -12,9 +12,12 @@ class settingsWatcher(object):
         self.filename = self.settings['WATCHED_FILE']
         self.call_func_on_change = self.reload_watched_file
 
-    def look(self):
+    def look(self) -> bool:
         """
-        Look for changes
+        Look for changes in watched filename
+        and call predefined self.call_func_on_change
+
+        :return: True if watched file is refreshed
         """
         is_refreshed = False
         stamp = os.stat(self.filename).st_mtime
@@ -28,7 +31,9 @@ class settingsWatcher(object):
 
     def reload_watched_file(self):
         """
-        Call this function each time a change happens
+        This function calls each time a change happens
+        Reload settings module
+        Write new setting dict from newly imported module to self.settings
         """
         self.import_or_reload('settings')
         self.settings.clear()
@@ -36,6 +41,12 @@ class settingsWatcher(object):
 
     @staticmethod
     def import_or_reload(module_name, *names):
+        """
+        Reload module and redefine globals
+        :param module_name:
+        :param names:
+        :return:
+        """
         import sys
 
         if module_name in sys.modules:
@@ -48,7 +59,7 @@ class settingsWatcher(object):
 
     def build_dict(self):
         """
-        Build and return a dict of settings from imported module
+        Build and return a dict of settings from imported settings module
         """
         return {attr: getattr(settings, attr) for attr in dir(settings) if not callable(
                 getattr(settings, attr)) and not attr.startswith("__")}
