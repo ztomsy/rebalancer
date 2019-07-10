@@ -25,5 +25,5 @@ if __name__ == '__main__':
     except Exception:
         logger.error("Stop main loop for next reason:", exc_info=True)
     except (KeyboardInterrupt, SystemExit):
-        logger.info('Rebalancer stop working after %.2f minutes' % ((time.time() - start) / 60))
+        logger.info('Rebalancer stop working after %.2f minutes'.format(((time.time() - start) / 60)))
     sys.exit()
