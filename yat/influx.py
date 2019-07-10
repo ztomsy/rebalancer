@@ -11,7 +11,7 @@ class Influx(object):
                                          password=password,
                                          database=database)
         except Exception as e:
-            print('Connection to InfluxDB failed: ', type(e).__name__, "-=-=-", e.args, '-=-=-', str(e))
+            raise RuntimeError('Connection to InfluxDB failed') from e
 
     def _write_points(self, points=None, time_precision=None, database=None, protocol='json'):
         try:
@@ -20,7 +20,7 @@ class Influx(object):
                                      database=database,
                                      protocol=protocol)
         except Exception as e:
-            print('Writing data to InfluxDB failed: ', type(e).__name__, "-=-=-", e.args, '-=-=-', str(e))
+            raise RuntimeError('Writing data to InfluxDB failed') from e
 
     def _query(self, query='', database=None, chunked=False, chunk_size=0):
         try:
@@ -29,7 +29,7 @@ class Influx(object):
                                      chunked=chunked,
                                      chunk_size=chunk_size)
         except Exception as e:
-            print('Querying data from InfluxDB failed: ', type(e).__name__, "-=-=-", e.args, '-=-=-', str(e))
+            raise RuntimeError('Querying data from InfluxDB failed') from e
 
     def report_order(self, order: dict, provider: str, exchange: str):
         """
@@ -63,4 +63,3 @@ class Influx(object):
         p_state['fields'] = dict(param1=market_state['param1'],
                                  param2=market_state['param2'],)
         self._write_points(p_state)
-        pass
