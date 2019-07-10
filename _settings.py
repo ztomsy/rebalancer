@@ -7,27 +7,31 @@
 PORTFOLIO_BASE_ASSET = 'USDT'
 
 # Specify the assets that you hold. These will be used in portfolio calculations.
-PORTFOLIO = {
-    'BTC': (0.05, 0.9),
-    'ETH': (0.05, 0.9),
-    'BNB': (0.05, 0.9),
-    # 'USDT': (0.05, 0.9),
-    # 'TRX': (0, 1),
-    # 'OMG': (0, 1),
-    # 'ZRX': (0, 1),
-    # 'REP': (0, 1),
-    # 'VET': (0, 1),
-    # 'ICX': (0, 1),
-    # 'ZIL': (0, 1),
-    # 'AE': (0, 1),
-    }
+PORTFOLIO_WHITE_LIST = [
+                        'BTC',
+                        'ETH',
+                        'BNB',
+                        # 'USDT',
+                        # 'USDSB',
+                        'TRX',
+                        'OMG',
+                        'ZRX',
+                        'REP',
+                        'VET',
+                        'ICX',
+                        'ZIL',
+                        'AE',
+                        ]
 
+PORTFOLIO_BLACK_LIST = [
+                        'USDSB',
+                       ]
 
 ########################################################################################################################
 # Portfolio optimization settings
 ########################################################################################################################
 
-WEIGHT_BOUNDS = (0.05, 0.99)
+WEIGHT_BOUNDS = (0.0, 0.95)
 
 # Use this settings to define portfolio optimization behaviour
 # Choose only one of next option at the same time
@@ -101,5 +105,5 @@ TIMEOUT = 7
 # If file changes, reload the bot.
 WATCHED_FILE = 'settings.py'
 
-BUILD_DATE = '190704'
+BUILD_DATE = '190710'
 

@@ -8,6 +8,7 @@ from random import randrange, seed
 
 from binance.restclient import RestClient as binanceRestClient
 from payload.trader import Trader
+from yat.assetlist.StaticAssetList import StaticAssetList
 from yat.uicurses import uiCurses, curses
 from yat.influx import Influx
 from yat.calcus import rounded_to_precision
@@ -45,26 +46,6 @@ class Runner(object):
             self.db = Influx(**kwargs['INFLUX_DATA'])
         else:
             self.db = None
-        # Init portfolio
-        self.portfolio = kwargs['PORTFOLIO']
-        self.rebalancing_precision = kwargs['REBALANCING_PRECISION']
-        self.portfolio_base_asset = kwargs['PORTFOLIO_BASE_ASSET']
-        self.portfolio_base_amount: float = 0
-        self.portfolio_assets = [x for x in self.portfolio.keys()]
-        self.portfolio_weight_bounds = kwargs['WEIGHT_BOUNDS']
-        self.portfolio_target_return = kwargs['TARGET_RETURN']
-        self.portfolio_target_risk = kwargs['TARGET_RISK']
-        self.portfolio_time_frames = kwargs['TIME_FRAMES']
-        self.portfolio_ohlcv = {}
-        self.portfolio_current_weights = {}
-        self.portfolio_recommended_weights = {}
-        self.portfolio_difference = {}
-        # Quote collector container
-        self.quote_collector = []
-
-        self.run_step = 0
-        self.balances = {}
-
         # Initialise exchanges
         self.data_provider_list = []
         self.exchange = binanceRestClient(window=kwargs['AUTH_DATA']['binance']['window'],
@@ -75,11 +56,36 @@ class Runner(object):
                                           marketonly=self.market_only)
         self.data_provider_list.append(self.exchange.exchange_name)
         # self.data_provider_list.append([self.exchange.exchange_name, self.exchange])
+        # Init portfolio
+        self.portfolio_base_asset = kwargs['PORTFOLIO_BASE_ASSET']
+        self.portfolio_weight_bounds = kwargs['WEIGHT_BOUNDS']
+        # Define Static portfolio asset list
+        self.portfolio_manager = StaticAssetList(self.logger,
+                                                 self.exchange,
+                                                 kwargs['PORTFOLIO_WHITE_LIST'],
+                                                 kwargs['PORTFOLIO_BLACK_LIST'],
+                                                 self.portfolio_weight_bounds)
+        self.portfolio_manager.refresh_assetlist()
+        # Define markets and filter assets with direct or 2-leg markets only
+        self.portfolio_base_markets = self.portfolio_manager.build_portfolio_assets_markets(self.portfolio_base_asset)
+        self.portfolio_assets = self.portfolio_manager.whitelist
+        self.portfolio = self.portfolio_manager.portfolio
+
+        self.rebalancing_precision = kwargs['REBALANCING_PRECISION']
+        self.portfolio_base_amount: float = 0
+        self.portfolio_target_return = kwargs['TARGET_RETURN']
+        self.portfolio_target_risk = kwargs['TARGET_RISK']
+        self.portfolio_time_frames = kwargs['TIME_FRAMES']
+        self.portfolio_ohlcv = {}
+        self.portfolio_current_weights = {}
+        self.portfolio_recommended_weights = {}
+        self.portfolio_difference = {}
+        # Quote collector container
+        self.quote_collector = []
+        self.run_step = 0
+        self.balances = {}
         # Get all tickers
         self.exchange.process_tickers()
-        # Define markets and filter assets with direct markets only
-        self.portfolio_base_markets, self.portfolio_assets = self.build_portfolio_base_markets(
-                self.exchange.markets, self.portfolio_assets, self.portfolio_base_asset)
         # Run main loop and close threads on exit
         try:
             self.run_balancer()
@@ -91,41 +97,6 @@ class Runner(object):
             # self.logger.info("Shutdown application")
             # self.exchange2.execute.shutdown()
             # self.exchange.order_history_to_pickle(self.cache_path)
-
-    @staticmethod
-    def build_portfolio_base_markets(markets: dict, portfolio_assets: list, portfolio_base_asset: str):
-        # Build new assets and markets list
-        pa_list = []
-        pbm_list = []
-        # Filter assets with only direct markets available
-        for x, y in markets.items():
-            if y['base'] in portfolio_assets and y['quote'] == portfolio_base_asset:
-                pbm_list.append(x)
-                pa_list.append(y['base'])
-                portfolio_assets.remove(y['base'])
-            elif y['quote'] in portfolio_assets and y['base'] == portfolio_base_asset:
-                pbm_list.append(x)
-                pa_list.append(y['quote'])
-                portfolio_assets.remove(y['quote'])
-        if len(portfolio_assets) > 0:
-            for a in portfolio_assets:
-                # Define basis swap markets in case there is no direct market to count data.
-                # Maybe change all logic to work with pseudo markets like 'FUEL/BTC.ADA/BTC, 'AE/BTC.BTC/USDT'
-                # FIXME Works only if trade is available through BTC swap markets
-                if f'{a}/BTC' in markets.keys():
-                    pbm_list.append(f'{a}/BTC')
-                    pa_list.append(a)
-                elif f'BTC/{a}' in markets.keys():
-                    pbm_list.append(f'BTC/{a}')
-                    pa_list.append(a)
-
-            if f'{portfolio_base_asset}/BTC' in markets.keys():
-                pbm_list.append(f'{portfolio_base_asset}/BTC')
-            elif f'BTC/{portfolio_base_asset}' in markets.keys():
-                pbm_list.append(f'BTC/{portfolio_base_asset}')
-
-        pa_list.append(portfolio_base_asset)
-        return list(set(pbm_list)), list(set(pa_list))
 
     # region Index data
     def _update_index_data(self):
@@ -187,10 +158,15 @@ class Runner(object):
                 elif f'BTC/{symbol_quote}' in self.exchange.all_tickers.keys():
                     ba_btc_price = self.exchange.all_tickers[f'BTC/{symbol_quote}']['ask']
                 return amount * a_btc_price * ba_btc_price
+            # TODO This case need more testing
             elif f'BTC/{symbol_base}' in self.exchange.all_tickers.keys():
-                # TODO Add behaviour
-                pass
-
+                a_btc_price = 1 / self.exchange.all_tickers[f'BTC/{symbol_base}']['ask']
+                ba_btc_price = 0
+                if f'{symbol_quote}/BTC' in self.exchange.all_tickers.keys():
+                    ba_btc_price = 1 / self.exchange.all_tickers[f'{symbol_quote}/BTC']['ask']
+                elif f'BTC/{symbol_quote}' in self.exchange.all_tickers.keys():
+                    ba_btc_price = self.exchange.all_tickers[f'BTC/{symbol_quote}']['ask']
+                return amount * a_btc_price * ba_btc_price
         except KeyError:
             return 0.0
         except ZeroDivisionError:
@@ -519,11 +495,11 @@ class Runner(object):
                     self.portfolio_ohlcv.clear()
                     self.portfolio_ohlcv = self.exchange.process_ohlcv(markets=self.portfolio_base_markets,
                                                                        time_frames=self.portfolio_time_frames,
-                                                                       limit=24)
+                                                                       limit=200)
                     # for _ in self.portfolio_base_markets:
                     #     self.portfolio_ohlcv[_] = self.exchange.get_ohlcv(_, timeframe='1h', limit=200)
-                    exp_return_periods = 24
-                    risk_model_periods = 24
+                    exp_return_periods = 200
+                    risk_model_periods = 200
                     # Fill balances data
                     self.ui.reload_ui(statusbar_str="Load balances")
                     self.exchange.fetch_balances()
