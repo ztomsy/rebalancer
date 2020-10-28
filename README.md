@@ -135,6 +135,43 @@ The following is some of what you can expect when running this program:
 
 - [ ] Market state optimization by machine learning to optimize your bot parameters.
 
+## Roadmap
+### Setup: 
+- Base_asset, market_depth_position_count
+### Portfolio: 
+- Ticker, position, cost, lob(tob), 24h volume
+- Optimization recommendation
+- Optimized order agregator
+### Market Depth:
+- LOB(Central or centered)
+- Last, Position, Cost
+### Limit Ladder Orderbook(Trader)
+- Last, Position, VWAP
+### Order Container
+- Feeded from Trader
+- Asset, Volume, Price
+- Market order
+- Limit order
+- Swipe order
+- <arketable limit order(submit order at price higher(lower) than the current ask(bid) price
+### Trader
+- Return an offset for current volume[desired for swipe order]
+- Set desired offset value(0.0)
+### Trade blotter
+STILL ACTIVE
+- Live
+- Partial
+UNACTIVE
+- Filled
+- Cancelled
+### Transaction log
+- Trader, tick, asset, price sum, quantity
+### Kill all orders
+### Charting
+- OHLCV charts
+### Portfolio Optimization
+### Average trading volume screen
+
 
 ## Exchange marketplaces supported
 - [x] [Binance](https://www.binance.com/)
