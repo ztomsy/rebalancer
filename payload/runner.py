@@ -18,11 +18,6 @@ from payload.portfolioOpt import PortfolioOpt
 class Runner(object):
     """
     Init and run main loop
-    >>>r=Runner
-    >>>r.balances = {}
-    >>>r._count_base_balance('')
-
-
 
     """
 
