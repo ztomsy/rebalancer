@@ -103,18 +103,10 @@ class uiCurses:
             self.stdscr.addstr('{:^10s}'.format(str(data[0][i])), curses.color_pair(1))
         self.stdscr.addstr("\n")
 
-    @staticmethod
-    def check_string_to_float(s):
-        try:
-            float(s)
-            return True
-        except:
-            return False
-
     def print_table_body(self, data: list, color_b: float = -0.09):
         for i in range(1, len(data)):
             for j in range(0, len(data[i])):
-                if self.check_string_to_float(data[i][j]):
+                if isinstance(data[i][j], float):
                     data_ij = float(data[i][j])
                     if data_ij >= color_b:
                         self.stdscr.addstr("{:^10s}".format(str(data[i][j])), curses.color_pair(3))
