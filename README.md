@@ -42,12 +42,11 @@ expect.
 We strongly recommend you to have coding and Python knowledge. Do not
 hesitate to read the source code and understand the mechanism of this bot.
 
-
 ## Getting Started
 
 ```bash
-git clone git@bitbucket.org:Nekrasovp/yat-rebalancer.git
-cd yat-rebalancer
+git clone git@github.com:ztomsy/rebalancer.git
+cd rebalancer
 python -m pip install requirements
 cp _setings.py settings.py
 ```
@@ -62,7 +61,6 @@ sh start.sh
 ```
 
 For any other type of installation please refer to [Installation doc](docs/Installation.md).
-
 
 ## Operation Overview
 
@@ -79,19 +77,18 @@ This bot works on the following principles:
 * Report on succeed orders.
 * Cancel unfilled orders before generating new recommendations and orders.
 * Check settings file or db and reload on changes.
-    
+
 ## Simplified Output
 
 The following is some of what you can expect when running this program:
 
- 
 ![main_screen](docs/rebalancer_main_screen.png "Main screen of one of the earliest version")
 
 ## Roadmap and features
 
-- [x] Based on Python 3.7+: For operating on any operating system - Windows, macOS and Linux.
-- [x] Dry-run support to run the bot without playing money.
-- [x] Simple curses gui which works with console, tmux, a ANSI terminal, a Telnet or SSH client
+* [x] Based on Python 3.7+: For operating on any operating system - Windows, macOS and Linux.
+* [x] Dry-run support to run the bot without playing money.
+* [x] Simple curses gui which works with console, tmux, a ANSI terminal, a Telnet or SSH client
 
          + Header bar
          + Footer bar
@@ -105,10 +102,10 @@ The following is some of what you can expect when running this program:
 - [x] Support for assets with direct trade market available
 - [x] 2-leg market data for markets without direct trade to base asset     
 - [x] Settings watcher check file changes to reload the bot(let you control settings with other scripts)
-- [ ] Persistence is achieved through db communication.
+- [x] Persistence is achieved through db communication.
         
         + Database reporting on trades
-        - Report on ohlcv refresh and recomendations calculating
+        + Report on ohlcv refresh and recomendations calculating
         - Settings watcher check db for settings change
         - Check db on start for previous state on reboot
         
@@ -135,12 +132,11 @@ The following is some of what you can expect when running this program:
 
 - [ ] Market state optimization by machine learning to optimize your bot parameters.
 
-
 ## Exchange marketplaces supported
-- [x] [Binance](https://www.binance.com/)
-- [ ] [Kucoin](https://www.kucoin.com/)
-- [ ] [100+ others to tests](https://github.com/ccxt/ccxt/). _(We cannot guarantee they will work)_
 
+- [x] [Binance](https://www.binance.com/)
+- [x] [Kucoin](https://www.kucoin.com/)
+- [ ] [100+ others to tests](https://github.com/ccxt/ccxt/). _(We cannot guarantee they will work)_
 
 ## Troubleshooting
 
@@ -150,7 +146,6 @@ While we use Sequential Least SQuares Programming (SLSQP) for optimization,
 we have unexpected behaviour when we use small amount of data(less then 4 time periods).
 Problems also happens when you use unconsistent data with big differences and small amount of periods.
 Read more [here](https://github.com/scipy/scipy/issues/7519)
-
 
 ## Compatibility
 

@@ -15,8 +15,8 @@ You will need to create API Keys (Usually you get `key` and `secret`) from the E
 ## Quick start
 
 ```bash
-git clone git@bitbucket.org:Nekrasovp/yat-rebalancer.git
-cd yat-rebalancer
+git clone git@github.com:ztomsy/rebalancer.git
+cd rebalancer
 python -m pip install requirements
 cp _setings.py settings.py
 ```
@@ -111,7 +111,7 @@ source venv/bin/activate.fish
 Clone the git repository:
 
 ```bash
-git clone git@bitbucket.org:Nekrasovp/yat-rebalancer.git
+git clone git@github.com:ztomsy/rebalancer.git
 ```
 
 Optionally checkout the stable/master branch:
@@ -123,7 +123,7 @@ git checkout master
 #### 4. Initialize the configuration
 
 ```bash
-cd yat-rebalancer
+cd rebalancer
 cp _setings.py settings.py
 ```
 
