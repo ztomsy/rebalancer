@@ -11,8 +11,7 @@ PORTFOLIO_WHITE_LIST = [
                         'BTC',
                         'ETH',
                         'BNB',
-                        # 'USDT',
-                        # 'USDSB',
+                        'USDT',
                         'TRX',
                         'OMG',
                         'ZRX',
@@ -20,7 +19,6 @@ PORTFOLIO_WHITE_LIST = [
                         'VET',
                         'ICX',
                         'ZIL',
-                        'AE',
                         ]
 
 PORTFOLIO_BLACK_LIST = [

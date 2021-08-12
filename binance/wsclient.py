@@ -1,4 +1,3 @@
-# Mostly copied from https://github.com/JesseCorrington/binance-api-python/blob/master/binance.py
 import urllib.request
 import urllib.parse
 import json

@@ -2,10 +2,7 @@ import binance.wsclient as binance
 import asyncio
 import time
 
-
-# Turn logging on, its off by default
 binance.enable_logging(True)
-
 
 api_key = ""
 api_secret_key = ""
@@ -24,11 +21,6 @@ def orderbook():
     def on_order_book(data):
         ob = stream.get_order_book("ETHBTC")
         print(list(ob['asks'].items())[0], list(ob['bids'].items())[0])
-        # print("ws async ob call spend:", time.time() - tic)
-        # tic = time.time()
-        # print("order book changes - ", data)
-        # print("full orderbook - ", stream.get_order_book("ETHBTC"))
-
 
     stream.add_order_book("ETHBTC", on_order_book)
 
@@ -39,13 +31,10 @@ def orderbook():
 def market_data():
     print("\nMarket data examples\n")
 
-    # ping binance to see if it's online and verify we can hit it
     print("Connection ok? ", binance.ping())
 
-    # Get the current server time in milliseconds
     print("Server time: ", binance.server_time())
 
-    # Get the order book for a symbol with max 5 entries
     order_book = binance.order_book("BNBBTC", 5)
     print(order_book)
 
@@ -60,13 +49,11 @@ def market_data():
         print(price, quantity)
 
 
-    # Get aggregated trades
     print(binance.aggregate_trades("BNBBTC", limit=5))
 
     candles = binance.candlesticks("BNBBTC", "1m")
     print(candles)
 
-    # Ticker operations
     print("Current ticker prices")
     prices = binance.ticker_prices()
     print(prices)
@@ -90,7 +77,6 @@ def market_data():
 def account():
     print("\nAccount data examples\n")
 
-    # For signed requests we create an Account instance and give it the api key and secret
     account = binance.Account(api_key, api_secret_key)
 
     account.set_receive_window(5000)
@@ -123,7 +109,7 @@ def user_stream():
     stream = binance.Streamer()
 
     async def stop():
-        await(asyncio.sleep(5)) # Reduce timeout
+        await(asyncio.sleep(5))
         stream.close_all()
         asyncio.get_event_loop().stop()
 
@@ -148,7 +134,6 @@ def data_streams():
 
     def on_order_book(data):
         print("order book changes - ", data)
-        # print("full orderbook - ", stream.get_order_book("ETHBTC"))
 
     stream.add_order_book("ETHBTC", on_order_book)
 
@@ -156,13 +141,8 @@ def data_streams():
         print("new candlesticks - ", data)
         print("all candlesticks- ", stream.get_candlesticks("ETHBTC"))
 
-    # stream.add_candlesticks("ETHBTC", "1m", on_candlestick)
-
-
     def on_trades(data):
         print("trade update - ", data)
-
-    # stream.add_trades("ETHBTC", on_trades)
 
     asyncio.Task(stop())
 
