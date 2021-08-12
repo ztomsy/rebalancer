@@ -8,18 +8,14 @@ from yat.settingsWatcher import settingsWatcher
 from payload.runner import Runner
 from yat import logger
 
-
-# Parse settings file into dict
 watcher = settingsWatcher()
 settings = watcher.settings
 
-# Init logger and define log_level verbosity
 logger = logger.setup_custom_logger('Rebalancer', log_level=DEBUG)
 
 
 if __name__ == '__main__':
     start = time.time()
-    # Try/except just keeps ctrl-c from printing an ugly stacktrace
     try:
         market1 = Runner(logger=logger, watcher=watcher, **settings)
     except Exception:

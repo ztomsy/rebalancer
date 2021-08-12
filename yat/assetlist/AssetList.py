@@ -109,7 +109,6 @@ class AssetList(ABC):
 
         pa_list = set()
         pbm_list = set()
-        # Filter assets with only direct markets available
         for x, y in markets.items():
             if y['base'] in portfolio_assets and y['quote'] == portfolio_base_asset:
                 pbm_list.add(x)
@@ -119,24 +118,18 @@ class AssetList(ABC):
                 pbm_list.add(x)
                 pa_list.add(y['quote'])
                 portfolio_assets.remove(y['quote'])
-        # Check portfolio_assets list for assets with no direct market and define which one to choose
         if len(portfolio_assets) > 0:
             for a in portfolio_assets:
-                # Define basis swap markets in case there is no direct market to count data.
-                # Maybe change all logic to work with pseudo markets like 'FUEL/BTC.ADA/BTC, 'AE/BTC.BTC/USDT'
-                # FIXME Works only if trade is available through BTC swap markets
                 if f'{a}/BTC' in markets.keys():
                     pbm_list.add(f'{a}/BTC')
                     pa_list.add(a)
                 elif f'BTC/{a}' in markets.keys():
                     pbm_list.add(f'BTC/{a}')
                     pa_list.add(a)
-            # Add second leg for previous pseudo market, work only with BTC markets atm.
             if f'{portfolio_base_asset}/BTC' in markets.keys():
                 pbm_list.add(f'{portfolio_base_asset}/BTC')
             elif f'BTC/{portfolio_base_asset}' in markets.keys():
                 pbm_list.add(f'BTC/{portfolio_base_asset}')
-        # Add base asset to build final portfolio list
         pa_list.add(portfolio_base_asset)
 
         return list(pbm_list), list(pa_list)
