@@ -127,6 +127,8 @@ The following is some of what you can expect when running this program:
 
 - [x] [Binance](https://www.binance.com/)
 - [x] [Kucoin](https://www.kucoin.com/)
+- [ ] HTX
+- [ ] Poloniex
 - [ ] [100+ others to tests](https://github.com/ccxt/ccxt/). _(We cannot guarantee they will work)_
 
 ## Troubleshooting
